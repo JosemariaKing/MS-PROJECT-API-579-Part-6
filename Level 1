@@ -1,0 +1,135 @@
+# API 579 Pitting Assessment 
+# Level 1 
+# Piping Assessment
+
+#################################################################
+# Fitness-For-Service API 579-1/ASME FFS-1, June, 2016
+# PART 6 – ASSESSMENT OF PITTING CORROSION
+#################################################################
+
+# Pipe Data 
+# Material = SA 106B
+# Design Pressure = 250psig 
+# Wall thickness = .431
+# Uniform metal loss = 0
+# Future Corrosion allownace = 0.03"
+# Allowable Stress = 20,000psig
+# Weld Joint Efficiency = 1
+# Maximum Pitting Depth = .220 
+P = 250
+
+# Step 1 
+# Determine Do, FCA, Trd or Tnom and LOSS
+# Do = outside diameter of the cylinder, corrected for LOSS and FCA , as applicable.
+# FCA = Future Corrosion Allowance 
+# Trd = uniform thickness away from the damage area established by thickness measurements
+# Tnom = nominal or furnished thickness of the component adjusted for mill undertolerance as applicable.
+# LOSS = Amount of metal uniform loss 
+
+Do = 6.6259843
+FCA = 0.0299213
+LOSS = 0  # No uniform loss as pitting 
+Trd = 0.43188976 - 0 # Tnom - LOSS # Basically Trd is uniform loss adjacent to the pits ( Pit Adjacent)
+Tnom = 0.43188976
+
+# Step 2 - Determine the wall thickness to be used in the assessment using Equation 6.1 or Equation 6.2 as applicable.
+# tc = future corroded wall thickness away from the damage area
+# tc = Trd - FCA 
+Tc = Trd - FCA # .431 - 0.0299213
+
+# Step 3 - Locate the area on the component that has the highest density of pitting damage based on the 
+# number of pits. Obtain photographs (include reference scale), or rubbings of this area to record the amount
+# of surface damage. See Figure E6.2-1
+
+# Step 4 = Determine maximum pit depth , Wmax in region of pitting damage 
+# Wmax = Maximum pit
+# tmm = minimum measured wall thickness.
+Wmax = .220 
+tmm = Trd - Wmax
+
+# Step 5 - Determine the ratio of the remaining wall thickness to the future wall thickness in the pitted region
+# using Equation 6.3. In Equation (6.3), rd t can be replaced by nom t − LOSS . If 0.2 wt R < the Level 1
+# assessment criteria are not met.
+Rwt = tmm/Tc # this is for pitting acting on 1x side only (assuming no internal corrosion) 
+
+# Check if passed the level 1 assessment 
+if (Rwt >= 0.2) { 
+  cat("Yes", Rwt) 
+ } else {
+    print("Level 1 assessment has not been met")
+ }
+
+# Step 6 - Determine the MAWP for the component (see Annex A, paragraph A.5) using the thickness from STEP 2.
+D = Do - (2*Tnom)
+Rc = (D / 2) + LOSS + FCA
+
+# MAWP Per Annex 2c
+# Circumfrential MAWP ((2C.147))
+Sa = 20000# Allowable stress
+E = 1
+MA = 0 # mechanical allowances (thread or groove depth); for threaded components, the nominal thread
+# depth (dimension h of ASME B.1.20.1) shall apply.
+YB31 = 0.4 #coefficient from ASME B31 Piping codes used for determining the pipe wall thickness, the
+# coefficient can be determined from the following table that is valid for min 6 o t < D .
+Tsl = 0 # supplemental thickness for mechanical loads other than pressure that result in longitudinal stress; 
+#this thickness is usually obtained from the results of a weight case in a stress analysis of
+#the piping system (see paragraph 2C.2.7).
+
+# MAWPc = (2C.147)
+MAWPc = (2 * (E * Sa) * (Tc - MA)) / (2*((YB31) * (Tc - MA))) - Do
+2 * E * Sa * (Tc-MA) / (Do-((2*(YB31) * (Tc-MA))))
+
+2 * 137.89 * 1 * (10.21-0) / (168.3-((2*(.4) * (10.21))))
+
+137.89 * 145.038
+
+Do
+
+# MAWPl = (2C.150) 
+MAWPl = 4 * E * Sa * (Tc-MA) / (Do-((4*(YB31) * (Tc-MA))))
+4 * 137.89 * 1 * (10.21-0) / (168.3-((4*(.4) * (10.21))))
+
+17500 * .85 * .63 / (30.12 + ((.6 * .63)))
+
+# Note long is around 2* the circ. stress 
+
+# Find minimum of MAWPc and MAWPl
+MAWP = min(MAWPc,MAWPl)
+MAWP
+
+# Step 7 # Compare the surface damage from the photographs or rubbings to the standard pit charts shown
+# in Figures 6.3 through 6.10. Select a pit chart that has a measure of surface damage that approximates the
+# actual damage on the component. If the pitting damage is more extensive than that shown in Figure 6.10,
+# then compute the RSF using Equation 6.4 and proceed to STEP 9.
+# Based on the picture, the closest Level 1 pitting chart is Figure E6.2-2
+# Scale of the figure is 6 * 6 inches 
+
+# Basically: Use Rwt from STEP 5 
+print(Rwt)
+# = 0.5261845
+
+# We may interpolate on the table below the pit chart as per below 
+# First we have .526 from STEP 5
+# The next Rwt number above and below 0.525 is: 
+# 0.6 and 0.4 
+lower_rwt = .4
+Rwt_Diff = .6 - .4
+
+# Now interpolate Cylinder RSF value 
+lower_rsf = .85
+RSF_Diff = .90 - .85
+
+print(Rwt_Diff)
+print(RSF_Diff)
+
+# Solve for Interpolated RSF 
+RSF = RSF_Diff * ((Rwt - lower_rwt) / Rwt_Diff) + lower_rsf
+
+# Step 9
+RSFa = .9
+MAWPr = RSF / RSFa * MAWP
+
+if (MAWPr < P) { 
+  cat("Pipe fails level 1 assessment")
+} else { 
+    print("Pipe passes level 1 assessment")}
