@@ -1,0 +1,3430 @@
+!pip3 install fpdf
+!pip install reportlab
+import csv
+import traceback
+import sys
+import os
+import json
+from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QLabel, QLineEdit, QComboBox, QPushButton, 
+                             QVBoxLayout, QHBoxLayout, QAction, QFileDialog, QMessageBox, QTableWidget, 
+                             QTableWidgetItem, QInputDialog, QMenuBar, QToolBar, QDialog, QRadioButton, 
+                             QButtonGroup, QAbstractItemView, QSplashScreen, QGridLayout, QStackedWidget, QToolButton,
+                             QScrollArea, QFormLayout, QTabWidget)
+from PyQt5.QtGui import QIcon, QPixmap, QFont, QMovie, QColor
+from PyQt5.QtCore import Qt, QSize, QTimer, pyqtSignal
+from fpdf import FPDF
+import math
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import letter
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.units import inch
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
+from reportlab.pdfgen import canvas
+from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
+import math
+
+def load_config():
+    if not os.path.exists('config.json'):
+        default_config = {
+            "theme": "light",
+            "materials": ["SA 516", "SA 106", "SA 53", "API 5L"],
+            "design_codes": ["ASME Section VIII", "ASME B31.3", "ASME B31.4", "ASME B31.8"],
+            "unit_system": "SI",
+            "length_units": ["mm", "cm", "m", "in", "ft"],
+            "pressure_units": ["Pa", "kPa", "MPa", "psi", "bar"],
+            "force_units": ["N", "kN", "lbf"],
+            "moment_units": ["N-m", "kN-m", "in-lbf", "ft-lbf"],
+            "stress_units": ["Pa", "kPa", "MPa", "psi", "ksi"]
+        }
+        with open('config.json', 'w') as config_file:
+            json.dump(default_config, config_file, indent=4)
+    
+    with open('config.json', 'r') as config_file:
+        config = json.load(config_file)
+        
+    # Ensure all required keys are present
+    required_keys = [
+        "theme", "materials", "design_codes", "unit_system",
+        "length_units", "pressure_units", "force_units", "moment_units", "stress_units"
+    ]
+    for key in required_keys:
+        if key not in config:
+            if key == "theme":
+                config[key] = "light"
+            elif key == "unit_system":
+                config[key] = "SI"
+            elif key == "length_units":
+                config[key] = ["mm", "cm", "m", "in", "ft"]
+            elif key == "pressure_units":
+                config[key] = ["Pa", "kPa", "MPa", "psi", "bar"]
+            elif key == "force_units":
+                config[key] = ["N", "kN", "lbf"]
+            elif key == "moment_units":
+                config[key] = ["N-m", "kN-m", "in-lbf", "ft-lbf"]
+            elif key == "stress_units":
+                config[key] = ["Pa", "kPa", "MPa", "psi", "ksi"]
+            else:
+                config[key] = []
+    
+    with open('config.json', 'w') as config_file:
+        json.dump(config, config_file, indent=4)
+    
+    return config
+
+def save_config(config):
+    with open('config.json', 'w') as config_file:
+        json.dump(config, config_file, indent=4)
+
+def set_theme(app, theme):
+    if theme == "dark":
+        app.setStyleSheet("""
+            QWidget {
+                background-color: #2E2E2E;
+                color: #FFFFFF;
+            }
+            QPushButton {
+                background-color: #4A4A4A;
+                border: none;
+                padding: 5px;
+                border-radius: 3px;
+            }
+            QPushButton:hover {
+                background-color: #5A5A5A;
+            }
+            QLineEdit, QComboBox {
+                background-color: #3E3E3E;
+                border: 1px solid #5A5A5A;
+                padding: 3px;
+                border-radius: 3px;
+            }
+            QLabel#page-title {
+                font-size: 24px;
+                font-weight: bold;
+                margin-bottom: 20px;
+            }
+            QTableWidget {
+                gridline-color: #4A4A4A;
+                background-color: #2E2E2E;
+                border: 1px solid #5A5A5A;
+            }
+            QHeaderView::section {
+                background-color: #4A4A4A;
+                padding: 4px;
+                border: 1px solid #5A5A5A;
+                font-weight: bold;
+            }
+            QTableWidget::item {
+                border: 1px solid #4A4A4A;
+            }
+            QScrollBar:vertical {
+                border: 1px solid #5A5A5A;
+                background: #2E2E2E;
+                width: 15px;
+                margin: 0px 0px 0px 0px;
+            }
+            QScrollBar::handle:vertical {
+                background: #4A4A4A;
+                min-height: 20px;
+            }
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+                border: 1px solid #5A5A5A;
+                background: #4A4A4A;
+                height: 15px;
+                subcontrol-position: top;
+                subcontrol-origin: margin;
+            }
+        """)
+    else:
+        app.setStyleSheet("""
+            QWidget {
+                background-color: #F0F0F0;
+                color: #333333;
+            }
+            QPushButton {
+                background-color: #E0E0E0;
+                border: none;
+                padding: 5px;
+                border-radius: 3px;
+            }
+            QPushButton:hover {
+                background-color: #D0D0D0;
+            }
+            QLineEdit, QComboBox {
+                background-color: #FFFFFF;
+                border: 1px solid #CCCCCC;
+                padding: 3px;
+                border-radius: 3px;
+            }
+            QLabel#page-title {
+                font-size: 24px;
+                font-weight: bold;
+                margin-bottom: 20px;
+            }
+            QTableWidget {
+                gridline-color: #CCCCCC;
+                background-color: #FFFFFF;
+                border: 1px solid #CCCCCC;
+            }
+            QHeaderView::section {
+                background-color: #E0E0E0;
+                padding: 4px;
+                border: 1px solid #CCCCCC;
+                font-weight: bold;
+            }
+            QTableWidget::item {
+                border: 1px solid #E0E0E0;
+            }
+            QScrollBar:vertical {
+                border: 1px solid #CCCCCC;
+                background: #F0F0F0;
+                width: 15px;
+                margin: 0px 0px 0px 0px;
+            }
+            QScrollBar::handle:vertical {
+                background: #E0E0E0;
+                min-height: 20px;
+            }
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+                border: 1px solid #CCCCCC;
+                background: #E0E0E0;
+                height: 15px;
+                subcontrol-position: top;
+                subcontrol-origin: margin;
+            }
+        """)
+
+# Add this function to update the unit options in the UI
+def update_unit_options(widget, config):
+    for child in widget.findChildren(QComboBox):
+        if "length" in child.objectName().lower():
+            child.clear()
+            child.addItems(config['length_units'])
+        elif "pressure" in child.objectName().lower() or "stress" in child.objectName().lower():
+            child.clear()
+            child.addItems(config['pressure_units'] + config['stress_units'])
+        elif "force" in child.objectName().lower():
+            child.clear()
+            child.addItems(config['force_units'])
+        elif "moment" in child.objectName().lower():
+            child.clear()
+            child.addItems(config['moment_units'])
+
+def apply_style(widget):
+    widget.setContentsMargins(20, 20, 20, 20)
+    widget.setMinimumWidth(400)
+
+class LoginPage(QWidget):
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.parent = parent
+        self.initUI()
+
+    def initUI(self):
+        layout = QVBoxLayout()
+        layout.setAlignment(Qt.AlignCenter)
+
+        title = QLabel("Login")
+        title.setObjectName("page-title")
+        layout.addWidget(title)
+
+        self.login_type = QComboBox()
+        self.login_type.addItems(["Admin", "User"])
+        layout.addWidget(self.login_type)
+
+        self.username = QLineEdit()
+        self.username.setPlaceholderText("Username")
+        layout.addWidget(self.username)
+
+        self.password = QLineEdit()
+        self.password.setPlaceholderText("Password")
+        self.password.setEchoMode(QLineEdit.Password)
+        layout.addWidget(self.password)
+
+        login_button = QPushButton("Login")
+        login_button.clicked.connect(self.login)
+        layout.addWidget(login_button)
+
+        register_button = QPushButton("Register")
+        register_button.clicked.connect(self.parent.showRegisterPage)
+        layout.addWidget(register_button)
+
+        self.setLayout(layout)
+        apply_style(self)
+
+    def login(self):
+        username = self.username.text()
+        password = self.password.text()
+        if username and password:
+            self.parent.showMainPage()
+        else:
+            QMessageBox.warning(self, "Login Error", "Please enter both username and password.")
+
+class RegisterPage(QWidget):
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.parent = parent
+        self.initUI()
+
+    def initUI(self):
+        layout = QVBoxLayout()
+        layout.setAlignment(Qt.AlignCenter)
+
+        title = QLabel("Register")
+        title.setObjectName("page-title")
+        layout.addWidget(title)
+
+        self.name = QLineEdit()
+        self.name.setPlaceholderText("Name")
+        layout.addWidget(self.name)
+
+        self.designation = QLineEdit()
+        self.designation.setPlaceholderText("Designation")
+        layout.addWidget(self.designation)
+
+        self.username = QLineEdit()
+        self.username.setPlaceholderText("Username")
+        layout.addWidget(self.username)
+
+        self.password = QLineEdit()
+        self.password.setPlaceholderText("Password")
+        self.password.setEchoMode(QLineEdit.Password)
+        layout.addWidget(self.password)
+
+        register_button = QPushButton("Register")
+        register_button.clicked.connect(self.register)
+        layout.addWidget(register_button)
+
+        back_button = QPushButton("Back to Login")
+        back_button.clicked.connect(self.parent.showLoginPage)
+        layout.addWidget(back_button)
+
+        self.setLayout(layout)
+        apply_style(self)
+
+    def register(self):
+        name = self.name.text()
+        designation = self.designation.text()
+        username = self.username.text()
+        password = self.password.text()
+        if name and designation and username and password:
+            if not os.path.exists('users.json'):
+                with open('users.json', 'w') as file:
+                    json.dump({}, file)
+            with open('users.json', 'r') as file:
+                users = json.load(file)
+            if username in users:
+                QMessageBox.warning(self, "Registration Error", "Username already exists!")
+            else:
+                users[username] = {
+                    "name": name,
+                    "designation": designation,
+                    "password": password
+                }
+                with open('users.json', 'w') as file:
+                    json.dump(users, file)
+                QMessageBox.information(self, "Registration Successful", "You have registered successfully!")
+                self.parent.showLoginPage()
+        else:
+            QMessageBox.warning(self, "Registration Error", "Please fill in all fields!")
+            
+class MainPage(QWidget):
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.parent = parent
+        self.initUI()
+
+    def initUI(self):
+        layout = QVBoxLayout()
+        layout.setAlignment(Qt.AlignCenter)
+
+        title = QLabel("API 579 Pitting Assessment")
+        title.setObjectName("page-title")
+        layout.addWidget(title)
+
+        level1_button = QPushButton("Level 1 Assessment")
+        level1_button.clicked.connect(self.parent.showLevel1Assessment)
+        layout.addWidget(level1_button)
+
+        level2_button = QPushButton("Level 2 Assessment")
+        level2_button.clicked.connect(self.parent.showLevel2Assessment)
+        layout.addWidget(level2_button)
+
+        level3_button = QPushButton("Level 3 Assessment")
+        level3_button.clicked.connect(self.parent.showLevel3Assessment)
+        layout.addWidget(level3_button)
+
+        full_assessment_button = QPushButton("Full Assessment")
+        full_assessment_button.clicked.connect(self.parent.showFullAssessment)
+        layout.addWidget(full_assessment_button)
+
+        self.setLayout(layout)
+        apply_style(self)
+
+class Level1AssessmentPage(QWidget):
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.parent = parent
+        self.config = load_config()
+        self.initUI()
+        self.applyTheme(self.config['theme'])
+
+    def applyTheme(self, theme):
+        if theme == "dark":
+            self.setStyleSheet("""
+                QWidget {
+                    background-color: #2E2E2E;
+                    color: #FFFFFF;
+                }
+                QPushButton {
+                    background-color: #4A4A4A;
+                    border: none;
+                    padding: 5px;
+                    border-radius: 3px;
+                }
+                QPushButton:hover {
+                    background-color: #5A5A5A;
+                }
+                QLineEdit, QComboBox {
+                    background-color: #3E3E3E;
+                    border: 1px solid #5A5A5A;
+                    padding: 3px;
+                    border-radius: 3px;
+                }
+            """)
+        else:
+            self.setStyleSheet("""
+                QWidget {
+                    background-color: #F0F0F0;
+                    color: #333333;
+                }
+                QPushButton {
+                    background-color: #E0E0E0;
+                    border: none;
+                    padding: 5px;
+                    border-radius: 3px;
+                }
+                QPushButton:hover {
+                    background-color: #D0D0D0;
+                }
+                QLineEdit, QComboBox {
+                    background-color: #FFFFFF;
+                    border: 1px solid #CCCCCC;
+                    padding: 3px;
+                    border-radius: 3px;
+                }
+            """)
+            
+    def initUI(self):
+        layout = QVBoxLayout()
+        
+        title = QLabel("Level 1 Assessment")
+        title.setObjectName("page-title")
+        layout.addWidget(title)
+
+        # Create tab widget
+        self.tab_widget = QTabWidget()
+        layout.addWidget(self.tab_widget)
+
+        # Create and add Facility Data tab
+        facility_widget = QWidget()
+        facility_scroll = QScrollArea()
+        facility_scroll.setWidgetResizable(True)
+        facility_scroll.setWidget(facility_widget)
+        facility_layout = QVBoxLayout(facility_widget)
+        self.createFacilityDataInputs(facility_layout)
+        self.tab_widget.addTab(facility_scroll, "Facility Data")
+
+        # Create and add Component Data tab
+        component_widget = QWidget()
+        component_scroll = QScrollArea()
+        component_scroll.setWidgetResizable(True)
+        component_scroll.setWidget(component_widget)
+        component_layout = QFormLayout(component_widget)
+        self.createComponentDataInputs(component_layout)
+        self.tab_widget.addTab(component_scroll, "Component Data")
+
+        self.tab_widget.setCurrentIndex(0)
+
+        # Add other widgets (buttons, results label, etc.)
+        self.calculate_button = QPushButton("Calculate")
+        self.calculate_button.clicked.connect(self.calculateRwt)
+        layout.addWidget(self.calculate_button)
+
+        self.result_label = QLabel("")
+        self.result_label.setWordWrap(True)
+        layout.addWidget(self.result_label)
+
+        self.generate_report_button = QPushButton("Generate Detailed Report")
+        self.generate_report_button.clicked.connect(self.generateDetailedReport)
+        self.generate_report_button.setEnabled(False)
+        layout.addWidget(self.generate_report_button)
+
+        self.back_button = QPushButton("Back")
+        self.back_button.clicked.connect(self.backToMainPage)
+        layout.addWidget(self.back_button)
+
+        self.setLayout(layout)
+        self.updateUnitOptions()
+
+    def createFacilityDataInputs(self, layout):
+        # Information section
+        info_label = QLabel("Information")
+        info_label.setFont(QFont("Arial", 12, QFont.Bold))
+        info_label.setStyleSheet("text-decoration: underline;")
+        layout.addWidget(info_label)
+
+        info_form = QFormLayout()
+        
+        self.assessor_input = QLineEdit()
+        self.assessor_input.setToolTip("Enter the name of the assessor")
+        info_form.addRow("Assessor:", self.assessor_input)
+
+        self.checker_input = QLineEdit()
+        self.checker_input.setToolTip("Enter the name of the checker")
+        info_form.addRow("Checker:", self.checker_input)
+
+        self.approver_input = QLineEdit()
+        self.approver_input.setToolTip("Enter the name of the approver")
+        info_form.addRow("Approver:", self.approver_input)
+
+        self.date_input = QLineEdit()
+        self.date_input.setPlaceholderText("DD/MM/YYYY")
+        self.date_input.setToolTip("Enter the date of assessment (DD/MM/YYYY)")
+        info_form.addRow("Date:", self.date_input)
+
+        layout.addLayout(info_form)
+
+        # Facility Information section
+        facility_label = QLabel("Facility Information")
+        facility_label.setFont(QFont("Arial", 12, QFont.Bold))
+        facility_label.setStyleSheet("text-decoration: underline;")
+        layout.addWidget(facility_label)
+
+        facility_form = QFormLayout()
+
+        self.operator_input = QLineEdit()
+        self.operator_input.setToolTip("Enter the name of the facility operator")
+        facility_form.addRow("Operator:", self.operator_input)
+
+        self.installation_input = QLineEdit()
+        self.installation_input.setToolTip("Enter the name of the asset")
+        facility_form.addRow("Installation:", self.installation_input)
+
+        self.unit_input = QLineEdit()
+        self.unit_input.setToolTip("Enter the name of the processing unit")
+        facility_form.addRow("Unit:", self.unit_input)
+
+        self.equipment_input = QLineEdit()
+        self.equipment_input.setToolTip("Enter the equipment tag")
+        facility_form.addRow("Equipment:", self.equipment_input)
+
+        self.equipment_type_combo = QComboBox()
+        self.equipment_type_combo.addItems(["Pressure Vessel", "Piping", "Tank", "Other"])
+        self.equipment_type_combo.setToolTip("Select the type of equipment")
+        facility_form.addRow("Equipment Type:", self.equipment_type_combo)
+
+        layout.addLayout(facility_form)
+
+    def createComponentDataInputs(self, layout):
+        container = QWidget()
+        form_layout = QFormLayout(container)
+    
+        self.material_label = QLabel("Material Type:")
+        self.material_combobox = QComboBox()
+        self.material_combobox.addItems(self.config['materials'])
+        self.create_tooltip(self.material_combobox, "Select the material type of the pipe.")
+    
+        self.design_code_label = QLabel("Design Code:")
+        self.design_code_combobox = QComboBox()
+        self.design_code_combobox.addItems(self.config['design_codes'])
+        self.create_tooltip(self.design_code_combobox, "Select the design code.")
+    
+        self.diameter_option_label = QLabel("Diameter Type:")
+        self.diameter_inside_radio = QRadioButton("Inside Diameter")
+        self.diameter_outside_radio = QRadioButton("Outside Diameter")
+        self.diameter_group = QButtonGroup()
+        self.diameter_group.addButton(self.diameter_inside_radio)
+        self.diameter_group.addButton(self.diameter_outside_radio)
+        self.diameter_inside_radio.setChecked(True)
+        self.diameter_inside_radio.toggled.connect(self.update_diameter_input)
+    
+        self.diameter_label = QLabel("Diameter:")
+        self.diameter_input = QLineEdit()
+        self.diameter_unit_combobox = QComboBox()
+        self.create_tooltip(self.diameter_input, "Enter the diameter value.")
+        self.create_tooltip(self.diameter_unit_combobox, "Select the unit for the diameter.")
+    
+        self.createUnitInput("Design Pressure", form_layout)
+        self.createUnitInput("Future Corrosion Allowance", form_layout)
+        self.createUnitInput("Uniform Metal Loss", form_layout)
+        self.createUnitInput("Wall Thickness", form_layout)
+        self.createUnitInput("Maximum Pit Depth", form_layout)
+        self.createUnitInput("Allowable Stress", form_layout)
+    
+        self.efficiency_label = QLabel("Weld Joint Efficiency:")
+        self.efficiency_input = QLineEdit()
+        self.create_tooltip(self.efficiency_input, "Enter the weld joint efficiency (e.g., 0.85).")
+    
+       # Add corrosion type combobox
+        self.corrosion_type_label = QLabel("Corrosion Type:")
+        self.corrosion_type_combobox = QComboBox()
+        self.corrosion_type_combobox.addItem("", "")  # Add an empty item
+        self.corrosion_type_combobox.addItems([
+            "Widely scattered Pitting",
+            "Localized Pitting",
+            "Pitting confined within a region of localized metal loss",
+            "Region Of Local Metal Loss Located In An Area Of Widespread Pitting"
+        ])
+        self.corrosion_type_combobox.setCurrentIndex(0)  # Set the current index to the empty item
+        self.create_tooltip(self.corrosion_type_combobox, "Select the type of corrosion.")
+
+    
+        form_layout.addRow(self.material_label, self.material_combobox)
+        form_layout.addRow(self.design_code_label, self.design_code_combobox)
+        form_layout.addRow(self.diameter_option_label, self.diameter_inside_radio)
+        form_layout.addRow("", self.diameter_outside_radio)
+        form_layout.addRow(self.diameter_label, self.diameter_input)
+        form_layout.addRow("", self.diameter_unit_combobox)
+        form_layout.addRow(self.efficiency_label, self.efficiency_input)
+        form_layout.addRow(self.corrosion_type_label, self.corrosion_type_combobox)  # Add this line
+
+        # Create a scroll area and set the container as its widget
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setWidget(container)
+    
+        # Add the scroll area to the main layout
+        layout.addWidget(scroll_area)
+
+    def createUnitInput(self, label_text, layout):
+        input_field = QLineEdit()
+        unit_combobox = QComboBox()
+        self.create_tooltip(input_field, f"Enter the {label_text.lower()}.")
+        self.create_tooltip(unit_combobox, f"Select the unit for {label_text.lower()}.")
+        hbox = QHBoxLayout()
+        hbox.addWidget(input_field)
+        hbox.addWidget(unit_combobox)
+        layout.addRow(f"{label_text}:", hbox)
+        setattr(self, f"{label_text.replace(' ', '_').lower()}_input", input_field)
+        setattr(self, f"{label_text.replace(' ', '_').lower()}_unit", unit_combobox)
+
+    def update_diameter_input(self):
+        if self.diameter_inside_radio.isChecked():
+            self.diameter_label.setText("Inside Diameter:")
+        else:
+            self.diameter_label.setText("Outside Diameter:")
+
+    def create_tooltip(self, widget, text):
+        widget.setToolTip(text)
+
+    def updateUnitOptions(self):
+        unit_system = self.config.get('unit_system', 'SI')  # Default to 'SI' if not set
+        
+        if unit_system == "SI":
+            length_units = ["mm", "cm", "m"]
+            pressure_units = ["Pa", "kPa", "MPa", "bar"]
+            stress_units = ["Pa", "kPa", "MPa", "bar"]
+        
+        else:  # Imperial
+            length_units = ["in", "ft", "yd"]
+            pressure_units = ["psi", "psf", "inHg"]
+            stress_units = ["psi", "ksi"]
+
+        self.updateComboBoxOptions(self.diameter_unit_combobox, length_units)
+        self.updateComboBoxOptions(self.design_pressure_unit, pressure_units)
+        self.updateComboBoxOptions(self.future_corrosion_allowance_unit, length_units)
+        self.updateComboBoxOptions(self.uniform_metal_loss_unit, length_units)
+        self.updateComboBoxOptions(self.wall_thickness_unit, length_units)
+        self.updateComboBoxOptions(self.maximum_pit_depth_unit, length_units)
+        self.updateComboBoxOptions(self.allowable_stress_unit, stress_units)
+
+    def updateComboBoxOptions(self, combobox, options):
+        current_text = combobox.currentText()
+        combobox.clear()
+        combobox.addItems(options)
+        if current_text in options:
+            combobox.setCurrentText(current_text)
+        else:
+            combobox.setCurrentIndex(0)
+            
+    def backToMainPage(self):
+        self.parent.showMainPage()
+
+    def convert_units(self, value, from_unit, to_unit):
+        # Conversion factors
+        length_factors = {
+            'mm': 0.001, 'cm': 0.01, 'm': 1, 'in': 0.0254, 'ft': 0.3048, 'yd': 0.9144
+        }
+        pressure_factors = {
+            'Pa': 1, 'kPa': 1000, 'MPa': 1e6, 'psi': 6894.75729, 'bar': 1e5,
+            'psf': 47.88, 'inHg': 3386.39
+        }
+        stress_factors = {
+            'Pa': 1, 'kPa': 1000, 'MPa': 1e6, 'psi': 6894.75729, 'ksi': 6.894757e6
+        }
+        force_factors = {
+            'N': 1, 'kN': 1000, 'lbf': 4.448222, 'kip': 4448.222
+        }
+        moment_factors = {
+            'N-m': 1, 'kN-m': 1000, 'in-lbf': 0.112985, 'ft-lbf': 1.355818
+        }
+    
+        # Determine the type of unit
+        if from_unit in length_factors and to_unit in length_factors:
+            factors = length_factors
+        elif from_unit in pressure_factors and to_unit in pressure_factors:
+            factors = pressure_factors
+        elif from_unit in stress_factors and to_unit in stress_factors:
+            factors = stress_factors
+        elif from_unit in force_factors and to_unit in force_factors:
+            factors = force_factors
+        elif from_unit in moment_factors and to_unit in moment_factors:
+            factors = moment_factors
+        else:
+            raise ValueError(f"Unsupported unit conversion: {from_unit} to {to_unit}")
+    
+        # Convert value to float
+        try:
+            numeric_value = float(value)
+        except ValueError:
+            raise ValueError(f"Cannot convert '{value}' to a number")
+            
+        # Convert to base unit, then to target unit
+        return numeric_value * factors[from_unit] / factors[to_unit]
+
+    def calculateRwt(self):
+            
+        try:
+            assessor = self.assessor_input.text()
+            checker = self.checker_input.text()
+            approver = self.approver_input.text()
+            date = self.date_input.text()
+    
+            # Get facility data
+            operator = self.operator_input.text()
+            installation = self.installation_input.text()
+            unit = self.unit_input.text()
+            equipment = self.equipment_input.text()
+            equipment_type = self.equipment_type_combo.currentText()
+
+            material = self.material_combobox.currentText()
+            design_code = self.design_code_combobox.currentText()
+            diameter_option = "Inside Diameter" if self.diameter_inside_radio.isChecked() else "Outside Diameter"
+            diameter = float(self.diameter_input.text())
+            diameter_unit = self.diameter_unit_combobox.currentText()
+            efficiency = float(self.efficiency_input.text())
+            corrosion_type = self.corrosion_type_combobox.currentText()
+
+            # Convert all inputs to base SI units
+            self.P = self.convert_units(self.design_pressure_input.text(), self.design_pressure_unit.currentText(), 'Pa')
+            self.FCA = self.convert_units(self.future_corrosion_allowance_input.text(), self.future_corrosion_allowance_unit.currentText(), 'mm')
+            self.LOSS = self.convert_units(self.uniform_metal_loss_input.text(), self.uniform_metal_loss_unit.currentText(), 'mm')
+            self.Tnom = self.convert_units(self.wall_thickness_input.text(), self.wall_thickness_unit.currentText(), 'mm')
+            self.Wmax = self.convert_units(self.maximum_pit_depth_input.text(), self.maximum_pit_depth_unit.currentText(), 'mm')
+            self.Sa = self.convert_units(self.allowable_stress_input.text(), self.allowable_stress_unit.currentText(), 'Pa')
+            self.E = efficiency
+            self.MA = 0  # Mechanical allowances
+            self.YB31 = 0.4  # Coefficient from ASME B31 Piping codes
+            self.Tsl = 0  # Supplemental thickness for mechanical loads
+
+            if diameter_option == "Inside Diameter":
+                self.D = self.convert_units(diameter, diameter_unit, 'mm')
+                self.Do = self.D + 2 * self.Tnom
+            else:
+                self.Do = self.convert_units(diameter, diameter_unit, 'mm')
+                self.D = self.Do - 2 * self.Tnom
+
+            Trd = self.Tnom - self.LOSS
+            Tc = Trd - self.FCA
+            tmm = Trd - self.Wmax
+            self.Rwt = tmm / Tc
+            
+            self.detailed_results = {
+                "Assessor": assessor,
+                "Checker": checker,
+                "Approver": approver,
+                "Date": date,
+                "Operator": operator,
+                "Installation": installation,
+                "Unit": unit,
+                "Equipment": equipment,
+                "Equipment Type": equipment_type,
+                "Material": material,
+                "Design Code": design_code,
+                "Diameter Option": diameter_option,
+                "Diameter": diameter,
+                "Diameter Unit": diameter_unit,
+                "Efficiency": efficiency,
+                "Corrosion Type": corrosion_type,
+                "P": self.P,
+                "P Unit": 'Pa',
+                "FCA": self.FCA,
+                "FCA Unit": 'mm',
+                "LOSS": self.LOSS,
+                "LOSS Unit": 'mm',
+                "Tnom": self.Tnom,
+                "Tnom Unit": 'mm',
+                "Wmax": self.Wmax,
+                "Wmax Unit": 'mm',
+                "Sa": self.Sa,
+                "Sa Unit": 'Pa',
+                "Rwt": self.Rwt
+            }
+            if self.Rwt < 0.2:
+                result_text = f"Rwt = {self.Rwt:.4f}\nLevel 1 assessment has not been met"
+                self.result_label.setText(result_text)
+                discussion = self.generateDiscussionAndRecommendations()
+                QMessageBox.warning(self, "Assessment Result", f"Level 1 assessment failed.\n\n{discussion}")
+            else:
+                result_text = f"Rwt = {self.Rwt:.4f}\nProceed to next step"
+                self.result_label.setText(result_text)
+                self.generate_report_button.setEnabled(True)
+                self.showRsfInputs()
+
+            self.saveResult(self.detailed_results)
+
+        except ValueError as e:
+            QMessageBox.critical(self, "Error", f"Please enter valid numeric values for all fields. Error: {str(e)}")
+            self.generate_report_button.setEnabled(False)
+            
+    def showRsfInputs(self):
+        rsf, ok = QInputDialog.getDouble(self, "RSF Input", "Enter the remaining strength factor (RSF):", decimals=4)
+        if ok:
+            self.calculateFinalRsf(rsf)
+
+    def calculateFinalRsf(self, RSF):
+        try:
+            RSFa, ok = QInputDialog.getDouble(self, "RSFa Input", "Enter the allowable remaining strength factor (RSFa):", decimals=4)
+            if not ok:
+                return
+    
+            # Convert all inputs to base SI units (Pa)
+            Sa_Pa = self.convert_units(self.Sa, 'Pa', 'Pa')  # Sa is already in Pa from calculateRwt
+            P_Pa = self.convert_units(self.P, 'Pa', 'Pa')    # P is already in Pa from calculateRwt
+    
+            Tc = self.Tnom - self.LOSS - self.FCA
+            MAWPc = ((2 * Sa_Pa * self.E * (Tc - self.MA)) / (self.Do - 2 * self.YB31 * (Tc - self.MA)))
+            MAWPl = ((4 * Sa_Pa * self.E * (Tc - self.Tsl - self.MA)) / (self.Do - 4 * self.YB31 * (Tc - self.Tsl - self.MA)))
+            MAWP = min(MAWPc, MAWPl)
+    
+            if RSF >= RSFa:
+                MAWPr = MAWP
+            else:
+                MAWPr = (RSF / RSFa) * MAWP
+    
+            self.MAWPr = MAWPr
+    
+            # Convert results back to user-selected units
+            MAWP_converted = self.convert_units(MAWP, 'Pa', self.design_pressure_unit.currentText())
+            MAWPc_converted = self.convert_units(MAWPc, 'Pa', self.design_pressure_unit.currentText())
+            MAWPl_converted = self.convert_units(MAWPl, 'Pa', self.design_pressure_unit.currentText())
+            MAWPr_converted = self.convert_units(MAWPr, 'Pa', self.design_pressure_unit.currentText())
+            P_converted = self.convert_units(P_Pa, 'Pa', self.design_pressure_unit.currentText())
+            Sa_converted = self.convert_units(Sa_Pa, 'Pa', self.allowable_stress_unit.currentText())
+            
+            self.detailed_results.update({
+                "RSF": RSF,
+                "RSFa": RSFa,
+                "MAWP": MAWP,
+                "MAWPc": MAWPc,
+                "MAWPl": MAWPl,
+                "MAWPr": MAWPr,
+                "P": P_Pa,
+                "MAWP_converted": MAWP_converted,
+                "MAWPc_converted": MAWPc_converted,
+                "MAWPl_converted": MAWPl_converted,
+                "MAWPr_converted": MAWPr_converted,
+                "P_converted": P_converted,
+                "Sa_converted": Sa_converted,
+                "pressure_unit": self.design_pressure_unit.currentText(),
+                "stress_unit": self.allowable_stress_unit.currentText()
+            })
+
+            result_text = (f"Material: {self.material_combobox.currentText()}\n"
+                           f"Design Code: {self.design_code_combobox.currentText()}\n"
+                           f"Rwt: {self.Rwt:.4f}\n"
+                           f"MAWP: {MAWP_converted:.3f} {self.design_pressure_unit.currentText()}\n"
+                           f"MAWPc: {MAWPc_converted:.3f} {self.design_pressure_unit.currentText()}\n"
+                           f"MAWPl: {MAWPl_converted:.3f} {self.design_pressure_unit.currentText()}\n"
+                           f"RSF: {RSF:.4f}\n"
+                           f"RSFa: {RSFa:.4f}\n"
+                           f"MAWPr: {MAWPr_converted:.3f} {self.design_pressure_unit.currentText()}\n"
+                           f"Design Pressure: {P_converted:.3f} {self.design_pressure_unit.currentText()}\n"
+                           f"Allowable Stress: {Sa_converted:.3f} {self.allowable_stress_unit.currentText()}")
+    
+            self.result_label.setText(result_text)
+    
+            if MAWPr < P_Pa:
+                QMessageBox.warning(self, "Assessment Result", "Pipe fails level 1 assessment")
+            else:
+                QMessageBox.information(self, "Assessment Result", "Pipe passes level 1 assessment")
+    
+            self.generate_report_button.setEnabled(True)
+
+            self.saveResult(self.detailed_results)
+        
+        except ValueError as e:
+            QMessageBox.critical(self, "Error", f"Please enter valid numeric values for RSF and RSFa. Error: {str(e)}")
+
+    def level1_assessment_result(self):
+        rwt_pass = self.detailed_results['Rwt'] >= 0.2
+        mawp_pass = self.detailed_results.get('MAWPr') >= self.detailed_results['P']
+        return 'Pass' if rwt_pass and mawp_pass else 'Fail'
+    
+    def generateDiscussionAndRecommendations(self):
+        rwt_pass = self.detailed_results['Rwt'] >= 0.2
+        mawp_pass = self.detailed_results.get('MAWPr', 0) >= self.detailed_results['P']
+        
+        if not rwt_pass:
+            discussion = (
+                "The calculated remaining wall thickness ratio (Rwt) is less than 0.2, "
+                "indicating that the component does not meet the Level 1 assessment criteria. "
+                "This suggests significant metal loss that could compromise the integrity of the vessel."
+            )
+            recommendations = (
+                "1. Conduct a more detailed Level 2 or Level 3 assessment to determine the fitness-for-service of the vessel.\n"
+                "2. Increase the frequency of inspections to monitor the rate of metal loss.\n"
+                "3. Consider implementing corrosion mitigation strategies.\n"
+                "4. Plan for potential repair or replacement of the affected component."
+            )
+        elif not mawp_pass:
+            discussion = (
+                "While the remaining wall thickness ratio (Rwt) is acceptable, the reduced Maximum Allowable Working Pressure (MAWPr) "
+                "is less than the design pressure. This indicates that the vessel may not be able to safely contain the design pressure "
+                "due to the metal loss."
+            )
+            recommendations = (
+                "1. Reassess the operating conditions and consider reducing the operating pressure.\n"
+                "2. Conduct a more detailed Level 2 or Level 3 assessment for a more accurate evaluation.\n"
+                "3. Increase inspection frequency to closely monitor further metal loss.\n"
+                "4. Develop a plan for repair or replacement of the affected component."
+            )
+        else:
+            discussion = (
+                "The calculated remaining wall thickness ratio (Rwt) meets the Level 1 assessment criteria, "
+                "and the reduced Maximum Allowable Working Pressure (MAWPr) is greater than or equal to the design pressure. "
+                " The vessel is considered fit-for-service based on this assessment."
+            )
+            recommendations = (
+                "1. Continue with regular inspection schedules to monitor for any changes in metal loss.\n"
+                "2. Maintain current corrosion prevention measures.\n"
+                "3. Consider conducting a Level 2 assessment in the future for a more detailed evaluation."
+            )
+        return discussion, recommendations
+
+    def generateDetailedReport(self):
+        if not hasattr(self, 'detailed_results'):
+            QMessageBox.warning(self, "No Data", "Please perform calculations first.")
+            return
+    
+        try:
+            file_name, _ = QFileDialog.getSaveFileName(self, "Save Detailed Report", "", "PDF Files (*.pdf);;All Files (*)")
+            if not file_name:
+                return
+    
+            doc = SimpleDocTemplate(file_name, pagesize=letter, rightMargin=36, leftMargin=36, topMargin=36, bottomMargin=36)
+            story = []
+    
+            # Styles
+            styles = getSampleStyleSheet()
+            styles.add(ParagraphStyle(name='Center', alignment=TA_CENTER))
+            styles.add(ParagraphStyle(name='Right', alignment=TA_RIGHT))
+            styles['Heading1'].fontSize = 14
+            styles['Heading1'].spaceAfter = 6
+            styles['Normal'].fontSize = 10
+            styles['Normal'].leading = 12
+
+            # Add a new style for the title
+            styles.add(ParagraphStyle(
+                name='LargeBold',
+                parent=styles['Normal'],
+                fontSize=16,
+                leading=20,
+                alignment=TA_CENTER,
+                spaceAfter=0.2*inch,
+                fontName='Helvetica-Bold'
+            ))
+    
+            def header_footer(canvas, doc):
+                canvas.saveState()
+
+                # Page border
+                canvas.setStrokeColor(colors.black)
+                canvas.setLineWidth(1)
+                canvas.rect(doc.leftMargin, doc.bottomMargin,
+                            doc.width, doc.height)
+                
+                if doc.page > 1:
+                    header_data = [
+                        ['PYSA 2.0', ''],
+                        ['FFS Software', 'Originated by: ' + self.assessor_input.text()],
+                        ['Operator: ' + self.operator_input.text(), 'Checked by: ' + self.checker_input.text()],
+                        ['Installation: ' + self.installation_input.text(), 'Approved by: ' + self.approver_input.text()],
+                        ['Unit: ' + self.unit_input.text(), 'Date: ' + self.date_input.text()],
+                        ['Equipment tag: ' + self.equipment_input.text(), ''],
+                        ['Equipment type: ' + self.equipment_type_combo.currentText(), ''],
+                        ['Assessment type: Pitting Corrosion (Part 6)','Page: ' + str(doc.page)]
+                    ]
+                    header_table = Table(header_data, colWidths=[doc.width/2, doc.width/2])
+                    header_table.setStyle(TableStyle([
+                        ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
+                        ('FONTSIZE', (0, 0), (-1, -1), 8),
+                        ('TOPPADDING', (0, 0), (-1, -1), 1),
+                        ('BOTTOMPADDING', (0, 0), (-1, -1), 1),
+                        ('LINEBELOW', (0, -1), (-1, -1), 1, colors.black),
+                        ('BOX', (0, 0), (-1, -1), 1, colors.black),
+                        ('INNERGRID', (0, 0), (-1, -1), 0.5, colors.black),
+                        ('LINEAFTER', (0, 1), (0, -1), 1, colors.black),
+                        ('SPAN', (0, 0), (1, 0)),
+                        ('ALIGN', (0, 0), (0, 0), 'CENTER'),
+                    ]))
+                    header_width, header_height = header_table.wrap(doc.width, doc.height)
+                    header_table.drawOn(canvas, doc.leftMargin, doc.height + doc.topMargin - header_height)
+                
+                
+                # Footer
+                if doc.page == 1:
+                    footer_data = [[f"Originated by: {self.assessor_input.text()}",
+                                    f"Checked by: {self.checker_input.text()}",
+                                    f"Approved by: {self.approver_input.text()}",
+                                    f"Date: {self.date_input.text()}"]]
+                    
+                    footer_table = Table(footer_data, colWidths=[doc.width/4, doc.width/4, doc.width/4, doc.width/4])
+                    footer_table.setStyle(TableStyle([
+                        ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
+                        ('FONTSIZE', (0, 0), (-1, -1), 8),
+                        ('TOPPADDING', (0, 0), (-1, -1), 1),
+                        ('BOTTOMPADDING', (0, 0), (-1, -1), 1),
+                        ('BOX', (0, 0), (-1, -1), 1, colors.black),
+                        ('INNERGRID', (0, 0), (-1, -1), 0.5, colors.black),  # Add inner grid lines
+                    ]))
+                    footer_width, footer_height = footer_table.wrap(doc.width, doc.bottomMargin)
+                    footer_table.drawOn(canvas, doc.leftMargin, doc.bottomMargin)
+    
+                canvas.restoreState()
+    
+            def content(txt, style=styles["Normal"], klass=Paragraph, sep=0.1):
+                s = Spacer(0.2*inch, sep*inch)
+                para = klass(txt, style)
+                sect = [s, para]
+                return sect
+    
+            # Title Page
+            story.append(Spacer(1, 1.6*inch))
+            story.append(Paragraph("PYSA 1.0 Pitting Corrosion (Part 6)", styles['Title']))
+            story.append(Paragraph("FFS Assessment Report", styles['Title']))
+            story.append(Spacer(1, 0.5*inch))
+            story.append(Paragraph("for", styles['LargeBold']))
+            story.append(Paragraph(f"{self.operator_input.text()}", styles['LargeBold']))
+            story.append(Spacer(1, 0.5*inch))
+            story.append(Paragraph(f"{self.installation_input.text()}", styles['LargeBold']))
+            story.append(Paragraph(f"{self.equipment_input.text()}", styles['LargeBold']))
+            story.append(Paragraph(f"{self.date_input.text()}", styles['LargeBold']))
+            story.append(PageBreak())
+
+            # Content pages
+            story.append(Spacer(1, 1.6*inch))
+    
+            # Analysis Summary Page
+            story.extend(content("Analysis Summary", styles["Heading1"]))
+            story.extend(content(f"Level 1 Assessment: {self.level1_assessment_result()}"))
+            story.append(PageBreak())
+    
+            # Component Information Page
+            story.append(Spacer(1, 1.6*inch))
+            story.extend(content("Component Information", styles["Heading1"]))
+            story.extend(content(f"Original Design Code: {self.design_code_combobox.currentText()}"))
+            story.extend(content(f"Component Type: {self.equipment_type_combo.currentText()}"))
+            story.extend(content(f"Material Name: {self.material_combobox.currentText()}"))
+            story.extend(content(f"Corrosion Type: {self.corrosion_type_combobox.currentText()}"))
+            story.extend(content(f"Future Corrosion Allowance: {self.future_corrosion_allowance_input.text()} {self.future_corrosion_allowance_unit.currentText()}"))
+            story.extend(content(f"Uniform Metal Loss: {self.uniform_metal_loss_input.text()} {self.uniform_metal_loss_unit.currentText()}"))
+            story.extend(content(f"Maximum Pit Depth: {self.maximum_pit_depth_input.text()} {self.maximum_pit_depth_unit.currentText()}"))
+
+    
+            # Mechanical Data Page
+            story.extend(content("Mechanical Data", styles["Heading1"]))
+            story.extend(content(f"Diameter Type: {'Inside' if self.diameter_inside_radio.isChecked() else 'Outside'}"))
+            story.extend(content(f"Diameter: {self.diameter_input.text()} {self.diameter_unit_combobox.currentText()}"))
+            story.extend(content(f"Wall Thickness: {self.wall_thickness_input.text()} {self.wall_thickness_unit.currentText()}"))
+            story.extend(content(f"Design Pressure: {self.design_pressure_input.text()} {self.design_pressure_unit.currentText()}"))
+            story.extend(content(f"Material Maximum Allowable Stress: {self.allowable_stress_input.text()} {self.allowable_stress_unit.currentText()}"))
+            story.extend(content(f"Weld Joint Efficiency: {self.efficiency_input.text()}"))
+            story.append(PageBreak())
+    
+            # Level 1 Results Page
+            
+            story.append(Spacer(1, 1.6*inch))
+            story.extend(content("Level 1 Results", styles["Heading1"]))
+            story.extend(content(f"Final Result: {self.level1_assessment_result()}"))
+            story.extend(content(f"Remaining Thickness Ratio (Rwt): {self.detailed_results['Rwt']:.4f}"))
+            if 'MAWPr_converted' in self.detailed_results:
+                story.extend(content(f"Reduced Maximum Allowable Working Pressure (MAWPr): {self.detailed_results['MAWPr_converted']:.3f} {self.design_pressure_unit.currentText()}"))
+            story.extend(content(f"Design Pressure: {self.design_pressure_input.text()} {self.design_pressure_unit.currentText()}"))
+
+            # Discussion and Recommendations (now part of Level 1 Results)
+            story.extend(content("Discussion and Recommendations:", styles["Heading2"]))
+            try:
+                discussion_and_recommendations = self.generateDiscussionAndRecommendations()
+                if isinstance(discussion_and_recommendations, tuple) and len(discussion_and_recommendations) == 2:
+                    discussion, recommendations = discussion_and_recommendations
+                    story.extend(content("Discussion:", styles["Heading3"]))
+                    story.extend(content(discussion))
+                    story.extend(content("Recommendations:", styles["Heading3"]))
+                    for recommendation in recommendations.split('\n'):
+                        story.extend(content(recommendation.strip()))
+                else:
+                    story.extend(content(str(discussion_and_recommendations)))
+            except Exception as e:
+                story.extend(content(f"Error generating discussion and recommendations: {str(e)}"))
+
+            # Build PDF
+            try:
+                doc.build(story, onFirstPage=header_footer, onLaterPages=header_footer)
+                QMessageBox.information(self, "Report Saved", "Detailed report has been saved as PDF.")
+            except Exception as e:
+                QMessageBox.critical(self, "Error", f"An error occurred while saving the report: {str(e)}")
+            
+        except Exception as e:
+                QMessageBox.critical(self, "Error", f"Failed to generate report: {e}")
+                print(f"Detailed error: {traceback.format_exc()}")
+            
+    def saveResult(self, result):
+        self.parent.previous_results.append(result)
+        with open("previous_results.json", "w") as file:
+            json.dump(self.parent.previous_results, file)
+
+class Level2AssessmentPage(QWidget):
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.parent = parent
+        self.config = load_config()
+        self.inspection_data = []
+        self.detailed_results = {}
+        self.initUI()
+        self.applyTheme(self.config['theme'])
+
+    def initUI(self):
+        layout = QVBoxLayout()
+        
+        title = QLabel("Level 2 Assessment")
+        title.setObjectName("page-title")
+        layout.addWidget(title)
+
+        # Create tab widget
+        self.tab_widget = QTabWidget()
+        layout.addWidget(self.tab_widget)
+
+        # Create and add Facility Data tab
+        facility_widget = QWidget()
+        facility_scroll = QScrollArea()
+        facility_scroll.setWidgetResizable(True)
+        facility_scroll.setWidget(facility_widget)
+        facility_layout = QVBoxLayout(facility_widget)
+        self.createFacilityDataInputs(facility_layout)
+        self.tab_widget.addTab(facility_scroll, "Facility Data")
+
+        # Create and add Component Data tab
+        component_widget = QWidget()
+        component_scroll = QScrollArea()
+        component_scroll.setWidgetResizable(True)
+        component_scroll.setWidget(component_widget)
+        self.component_layout = QFormLayout(component_widget)
+        self.createComponentDataInputs(self.component_layout)
+        self.tab_widget.addTab(component_scroll, "Component Data")
+
+        self.tab_widget.setCurrentIndex(0)
+
+        import_button = QPushButton("Import Inspection Data")
+        import_button.clicked.connect(self.importInspectionData)
+        layout.addWidget(import_button)
+
+        self.calculate_button = QPushButton("Calculate")
+        self.calculate_button.clicked.connect(self.calculateLevel2Assessment)
+        layout.addWidget(self.calculate_button)
+
+        self.result_label = QLabel("")
+        self.result_label.setWordWrap(True)
+        layout.addWidget(self.result_label)
+
+        self.generate_report_button = QPushButton("Generate Detailed Report")
+        self.generate_report_button.clicked.connect(self.generateDetailedReport)
+        self.generate_report_button.setEnabled(False)
+        layout.addWidget(self.generate_report_button)
+
+        self.back_button = QPushButton("Back")
+        self.back_button.clicked.connect(self.parent.showMainPage)
+        layout.addWidget(self.back_button)
+
+        self.setLayout(layout)
+
+    def createFacilityDataInputs(self, layout):
+        # Information section
+        info_label = QLabel("Information")
+        info_label.setFont(QFont("Arial", 12, QFont.Bold))
+        info_label.setStyleSheet("text-decoration: underline;")
+        layout.addWidget(info_label)
+
+        info_form = QFormLayout()
+        
+        self.assessor_input = QLineEdit()
+        self.assessor_input.setToolTip("Enter the name of the assessor")
+        info_form.addRow("Assessor:", self.assessor_input)
+
+        self.checker_input = QLineEdit()
+        self.checker_input.setToolTip("Enter the name of the checker")
+        info_form.addRow("Checker:", self.checker_input)
+
+        self.approver_input = QLineEdit()
+        self.approver_input.setToolTip("Enter the name of the approver")
+        info_form.addRow("Approver:", self.approver_input)
+
+        self.date_input = QLineEdit()
+        self.date_input.setPlaceholderText("DD/MM/YYYY")
+        self.date_input.setToolTip("Enter the date of assessment (DD/MM/YYYY)")
+        info_form.addRow("Date:", self.date_input)
+
+        layout.addLayout(info_form)
+
+        # Facility Information section
+        facility_label = QLabel("Facility Information")
+        facility_label.setFont(QFont("Arial", 12, QFont.Bold))
+        facility_label.setStyleSheet("text-decoration: underline;")
+        layout.addWidget(facility_label)
+
+        facility_form = QFormLayout()
+
+        self.operator_input = QLineEdit()
+        self.operator_input.setToolTip("Enter the name of the facility operator")
+        facility_form.addRow("Operator:", self.operator_input)
+
+        self.installation_input = QLineEdit()
+        self.installation_input.setToolTip("Enter the name of the asset")
+        facility_form.addRow("Installation:", self.installation_input)
+
+        self.unit_input = QLineEdit()
+        self.unit_input.setToolTip("Enter the name of the processing unit")
+        facility_form.addRow("Unit:", self.unit_input)
+
+        self.equipment_input = QLineEdit()
+        self.equipment_input.setToolTip("Enter the equipment tag")
+        facility_form.addRow("Equipment:", self.equipment_input)
+
+        self.equipment_type_combo = QComboBox()
+        self.equipment_type_combo.addItems(["Pressure Vessel", "Piping", "Tank", "Other"])
+        self.equipment_type_combo.setToolTip("Select the type of equipment")
+        facility_form.addRow("Equipment Type:", self.equipment_type_combo)
+
+        layout.addLayout(facility_form)
+
+    def createComponentDataInputs(self, layout):
+        self.material_label = QLabel("Material Type:")
+        self.material_combobox = QComboBox()
+        self.material_combobox.addItems(self.config['materials'])
+        layout.addRow(self.material_label, self.material_combobox)
+
+        self.design_code_label = QLabel("Design Code:")
+        self.design_code_combobox = QComboBox()
+        self.design_code_combobox.addItems(self.config['design_codes'])
+        layout.addRow(self.design_code_label, self.design_code_combobox)
+
+        self.diameter_option_label = QLabel("Diameter Type:")
+        self.diameter_inside_radio = QRadioButton("Inside Diameter")
+        self.diameter_outside_radio = QRadioButton("Outside Diameter")
+        self.diameter_group = QButtonGroup()
+        self.diameter_group.addButton(self.diameter_inside_radio)
+        self.diameter_group.addButton(self.diameter_outside_radio)
+        self.diameter_inside_radio.setChecked(True)
+        diameter_layout = QHBoxLayout()
+        diameter_layout.addWidget(self.diameter_inside_radio)
+        diameter_layout.addWidget(self.diameter_outside_radio)
+        layout.addRow(self.diameter_option_label, diameter_layout)
+
+        self.createUnitInput("Diameter", layout)
+        self.createUnitInput("Wall Thickness", layout)
+        self.createUnitInput("Uniform Metal Loss", layout)
+        self.createUnitInput("Future Corrosion Allowance", layout)
+        self.createUnitInput("Allowable Stress", layout)
+        self.createUnitInput("Design Pressure", layout)
+        
+        self.weld_efficiency_label = QLabel("Weld Joint Efficiency:")
+        self.weld_efficiency_input = QLineEdit()
+        layout.addRow(self.weld_efficiency_label, self.weld_efficiency_input)
+
+        self.rsfa_label = QLabel("Allowable Remaining Strength Factor (RSFa):")
+        self.rsfa_input = QLineEdit()
+        layout.addRow(self.rsfa_label, self.rsfa_input)
+
+        self.corrosion_type_label = QLabel("Corrosion Type:")
+        self.corrosion_type_combobox = QComboBox()
+        self.corrosion_type_combobox.addItem("", "")  # Add an empty item
+        self.corrosion_type_combobox.addItems([
+            "Widely scattered Pitting",
+            "Localized Pitting",
+            "Pitting confined within a region of localized metal loss",
+            "Region Of Local Metal Loss Located In An Area Of Widespread Pitting"
+        ])
+        self.corrosion_type_combobox.setCurrentIndex(0)  # Set the current index to the empty item
+        self.corrosion_type_combobox.currentIndexChanged.connect(self.updateInputFields)
+        layout.addRow(self.corrosion_type_label, self.corrosion_type_combobox)
+
+    def updateUnitOptions(self):
+        unit_system = self.config.get('unit_system', 'SI')
+        
+        if unit_system == "SI":
+            length_units = ["mm", "cm", "m"]
+            pressure_units = ["Pa", "kPa", "MPa", "bar"]
+            stress_units = ["Pa", "kPa", "MPa", "bar"]
+            force_units = ["N", "kN"]
+            moment_units = ["N-m", "kN-m"]
+        else:  # Imperial
+            length_units = ["in", "ft", "yd"]
+            pressure_units = ["psi", "psf", "inHg"]
+            stress_units = ["psi", "ksi"]
+            force_units = ["lbf", "kip"]
+            moment_units = ["in-lbf", "ft-lbf"]
+    
+        # Update common unit comboboxes
+        self.updateComboBoxOptions(self.diameter_unit, length_units)
+        self.updateComboBoxOptions(self.wall_thickness_unit, length_units)
+        self.updateComboBoxOptions(self.uniform_metal_loss_unit, length_units)
+        self.updateComboBoxOptions(self.future_corrosion_allowance_unit, length_units)
+        self.updateComboBoxOptions(self.allowable_stress_unit, stress_units)
+        self.updateComboBoxOptions(self.design_pressure_unit, pressure_units)
+    
+        # Update unit comboboxes specific to Level 2 assessment
+        corrosion_type = self.corrosion_type_combobox.currentText()
+    
+        if corrosion_type == "Widely scattered Pitting":
+            self.updateComboBoxOptions(self.tangent_to_tangent_length_unit, length_units)
+            self.updateComboBoxOptions(self.depth_of_head_unit, length_units)
+            self.updateComboBoxOptions(self.distance_from_support_to_tangent_unit, length_units)
+            self.updateComboBoxOptions(self.saddle_reaction_force_unit, force_units)
+            self.updateComboBoxOptions(self.mid_span_bending_moment_unit, moment_units)
+    
+        elif corrosion_type == "Localized Pitting":
+            self.updateComboBoxOptions(self.lta_length_unit, length_units)
+            self.updateComboBoxOptions(self.lta_width_unit, length_units)
+            self.updateComboBoxOptions(self.distance_to_nearest_discontinuity_unit, length_units)
+    
+        elif corrosion_type in ["Pitting confined within a region of localized metal loss", 
+                                "Region Of Local Metal Loss Located In An Area Of Widespread Pitting"]:
+            self.updateComboBoxOptions(self.tangent_to_tangent_length_unit, length_units)
+            self.updateComboBoxOptions(self.lta_length_unit, length_units)
+            self.updateComboBoxOptions(self.lta_width_unit, length_units)
+            self.updateComboBoxOptions(self.total_weight_or_force_unit, force_units)
+            self.updateComboBoxOptions(self.saddle_reaction_force_unit, force_units)
+            self.updateComboBoxOptions(self.length_from_tangent_to_saddle_unit, length_units)
+            self.updateComboBoxOptions(self.height_of_head_unit, length_units)
+            self.updateComboBoxOptions(self.minimum_thickness_unit, length_units)
+            
+    def updateComboBoxOptions(self, combobox, options):
+        current_text = combobox.currentText()
+        combobox.clear()
+        combobox.addItems(options)
+        if current_text in options:
+            combobox.setCurrentText(current_text)
+        else:
+            combobox.setCurrentIndex(0)  
+            
+    def createUnitInput(self, label_text, layout):
+        input_field = QLineEdit()
+        unit_combobox = QComboBox()
+        
+        if "Pressure" in label_text:
+            unit_combobox.addItems(self.config['pressure_units'])
+        elif "Stress" in label_text:
+            unit_combobox.addItems(self.config['stress_units'])
+        elif "Force" in label_text or "Reaction" in label_text:
+            unit_combobox.addItems(self.config['force_units'])
+        elif "Moment" in label_text:
+            unit_combobox.addItems(self.config['moment_units'])
+        else:
+            unit_combobox.addItems(self.config['length_units'])
+        
+        hbox = QHBoxLayout()
+        hbox.addWidget(input_field)
+        hbox.addWidget(unit_combobox)
+        layout.addRow(f"{label_text}:", hbox)
+        setattr(self, f"{label_text.replace(' ', '_').lower()}_input", input_field)
+        setattr(self, f"{label_text.replace(' ', '_').lower()}_unit", unit_combobox)
+            
+    def updateInputFields(self):
+        corrosion_type = self.corrosion_type_combobox.currentText()
+        
+        # Clear previous specific inputs
+        for i in reversed(range(self.component_layout.rowCount())):
+            item = self.component_layout.itemAt(i, QFormLayout.LabelRole)
+            if item and item.widget():
+                widget = item.widget()
+                if hasattr(widget, 'text') and widget.text() not in [
+                    "Material Type:", "Design Code:", "Diameter Type:", "Diameter:",
+                    "Wall Thickness:", "Uniform Metal Loss:", "Future Corrosion Allowance:",
+                    "Allowable Stress:", "Design Pressure:", "Weld Joint Efficiency:",
+                    "Allowable Remaining Strength Factor (RSFa):", "Corrosion Type:"
+                ]:
+                    self.component_layout.removeRow(i)
+        
+        if corrosion_type == "Widely scattered Pitting":
+            self.createUnitInput("Tangent to Tangent Length", self.component_layout)
+            self.createUnitInput("Depth of Head", self.component_layout)
+            self.createUnitInput("Distance from Support to Tangent", self.component_layout)
+            self.createUnitInput("Saddle Reaction Force", self.component_layout)
+            self.createUnitInput("Mid Span Bending Moment", self.component_layout)
+        
+        elif corrosion_type == "Localized Pitting":
+            self.createUnitInput("LTA Length", self.component_layout)
+            self.createUnitInput("LTA Width", self.component_layout)
+            self.createUnitInput("Distance to Nearest Discontinuity", self.component_layout)
+        
+        elif corrosion_type in ["Pitting confined within a region of localized metal loss", 
+                                "Region Of Local Metal Loss Located In An Area Of Widespread Pitting"]:
+            self.createUnitInput("Tangent to Tangent Length", self.component_layout)
+            self.createUnitInput("LTA Length", self.component_layout)
+            self.createUnitInput("LTA Width", self.component_layout)
+            self.createUnitInput("Total Weight or Force", self.component_layout)
+            self.createUnitInput("Saddle Reaction Force", self.component_layout)
+            self.createUnitInput("Length from Tangent to Saddle", self.component_layout)
+            self.createUnitInput("Height of Head", self.component_layout)
+            self.createUnitInput("Minimum Thickness", self.component_layout)
+            
+        self.updateUnitOptions()
+        
+    def importInspectionData(self):
+        file_name, _ = QFileDialog.getOpenFileName(self, "Import Inspection Data", "", "CSV Files (*.csv)")
+        if file_name:
+            try:
+                with open(file_name, 'r') as file:
+                    csv_reader = csv.reader(file)
+                    header = next(csv_reader)  # Read the header row
+                    
+                    # Check if the CSV file has the correct number of columns
+                    expected_columns = 7  # Adjust this number based on your expected data format
+                    if len(header) != expected_columns:
+                        raise ValueError(f"Expected {expected_columns} columns, but found {len(header)}")
+
+                    self.inspection_data = []
+                    for row in csv_reader:
+                        if len(row) != expected_columns:
+                            raise ValueError(f"Row {csv_reader.line_num} has {len(row)} columns, expected {expected_columns}")
+                        
+                        # Convert numeric values to float, leave others as string
+                        processed_row = [float(val) if val.replace('.', '').isdigit() else val for val in row]
+                        self.inspection_data.append(processed_row)
+                        
+                QMessageBox.information(self, "Import Successful", f"Imported {len(self.inspection_data)} inspection data points.")
+            except csv.Error as e:
+                QMessageBox.critical(self, "CSV Error", f"Error reading CSV file: {str(e)}")
+            except ValueError as e:
+                QMessageBox.critical(self, "Data Error", f"Invalid data format: {str(e)}")
+            except Exception as e:
+                QMessageBox.critical(self, "Import Error", f"An unexpected error occurred:\n{str(e)}\n\n{traceback.format_exc()}")
+        
+    def calculateLevel2Assessment(self):
+        corrosion_type = self.corrosion_type_combobox.currentText()
+        # Check if corrosion type is selected
+        if not corrosion_type:
+            QMessageBox.warning(self, "Input Error", "Please select a corrosion type.")
+            return
+            
+        # Check if all required fields are filled
+        required_fields = [
+            (self.diameter_input, "Diameter"),
+            (self.wall_thickness_input, "Wall Thickness"),
+            (self.uniform_metal_loss_input, "Uniform Metal Loss"),
+            (self.future_corrosion_allowance_input, "Future Corrosion Allowance"),
+            (self.allowable_stress_input, "Allowable Stress"),
+            (self.design_pressure_input, "Design Pressure"),
+            (self.weld_efficiency_input, "Weld Joint Efficiency"),
+            (self.rsfa_input, "Allowable Remaining Strength Factor (RSFa)")
+        ]
+    
+        for input_field, field_name in required_fields:
+            if not input_field.text():
+                QMessageBox.warning(self, "Input Error", f"Please enter a value for {field_name}.")
+                return
+    
+        # Check if inspection data has been imported
+        if not self.inspection_data:
+            QMessageBox.warning(self, "Input Error", "Please import inspection data before calculating.")
+            return
+    
+        # Add corrosion type specific checks
+        if corrosion_type == "Widely scattered Pitting":
+            additional_fields = [
+                (self.tangent_to_tangent_length_input, "Tangent to Tangent Length"),
+                (self.depth_of_head_input, "Depth of Head"),
+                (self.distance_from_support_to_tangent_input, "Distance from Support to Tangent"),
+                (self.saddle_reaction_force_input, "Saddle Reaction Force"),
+                (self.mid_span_bending_moment_input, "Mid Span Bending Moment")
+            ]
+        elif corrosion_type == "Localized Pitting":
+            additional_fields = [
+                (self.lta_length_input, "LTA Length"),
+                (self.lta_width_input, "LTA Width"),
+                (self.distance_to_nearest_discontinuity_input, "Distance to Nearest Discontinuity")
+            ]
+        else:  # Combined pitting types
+            additional_fields = [
+                (self.tangent_to_tangent_length_input, "Tangent to Tangent Length"),
+                (self.lta_length_input, "LTA Length"),
+                (self.lta_width_input, "LTA Width"),
+                (self.total_weight_or_force_input, "Total Weight or Force"),
+                (self.saddle_reaction_force_input, "Saddle Reaction Force"),
+                (self.length_from_tangent_to_saddle_input, "Length from Tangent to Saddle"),
+                (self.height_of_head_input, "Height of Head"),
+                (self.minimum_thickness_input, "Minimum Thickness")
+            ]
+    
+        for input_field, field_name in additional_fields:
+            if not input_field.text():
+                QMessageBox.warning(self, "Input Error", f"Please enter a value for {field_name}.")
+                return
+            
+        try:
+            assessor = self.assessor_input.text()
+            checker = self.checker_input.text()
+            approver = self.approver_input.text()
+            date = self.date_input.text()
+            operator = self.operator_input.text()
+            installation = self.installation_input.text()
+            unit = self.unit_input.text()
+            equipment = self.equipment_input.text()
+            equipment_type = self.equipment_type_combo.currentText()
+
+             # Gather data from Component Data tab
+            material = self.material_combobox.currentText()
+            design_code = self.design_code_combobox.currentText()
+            diameter_option = "Inside Diameter" if self.diameter_inside_radio.isChecked() else "Outside Diameter"
+            diameter = self.convert_units(float(self.diameter_input.text()), self.diameter_unit.currentText(), 'in')
+            wall_thickness = self.convert_units(float(self.wall_thickness_input.text()), self.wall_thickness_unit.currentText(), 'in')
+            uniform_metal_loss = self.convert_units(float(self.uniform_metal_loss_input.text()), self.uniform_metal_loss_unit.currentText(), 'in')
+            future_corrosion_allowance = self.convert_units(float(self.future_corrosion_allowance_input.text()), self.future_corrosion_allowance_unit.currentText(), 'in')
+            allowable_stress = self.convert_units(float(self.allowable_stress_input.text()), self.allowable_stress_unit.currentText(), 'psi')
+            design_pressure = self.convert_units(float(self.design_pressure_input.text()), self.design_pressure_unit.currentText(), 'psi')
+            weld_efficiency = float(self.weld_efficiency_input.text())
+
+            self.detailed_results = {
+                'Assessor': assessor, 'Checker': checker, 'Approver': approver, 'Date': date,
+                'Operator': operator, 'Installation': installation, 'Unit': unit, 'Equipment': equipment,
+                'Equipment Type': equipment_type, 'Material': material, 'Design Code': design_code,
+                'Diameter Option': diameter_option, 'Diameter': diameter,
+                'Wall Thickness':wall_thickness, 'Uniform Metal Loss': uniform_metal_loss,
+                'Future Corrosion Allowance': future_corrosion_allowance, 'Allowable Stress': allowable_stress,
+                'Design Pressure': design_pressure, 'Weld Joint Efficiency': weld_efficiency
+            }    
+                
+            # Get common input values
+            D = self.convert_units(float(self.diameter_input.text()), self.diameter_unit.currentText(), 'in')
+            t_nom = self.convert_units(float(self.wall_thickness_input.text()), self.wall_thickness_unit.currentText(), 'in')
+            LOSS = self.convert_units(float(self.uniform_metal_loss_input.text()), self.uniform_metal_loss_unit.currentText(), 'in')
+            FCA = self.convert_units(float(self.future_corrosion_allowance_input.text()), self.future_corrosion_allowance_unit.currentText(), 'in')
+            Sa = self.convert_units(float(self.allowable_stress_input.text()), self.allowable_stress_unit.currentText(), 'psi')
+            P = self.convert_units(float(self.design_pressure_input.text()), self.design_pressure_unit.currentText(), 'psi')
+            E = float(self.weld_efficiency_input.text())
+            RSFa = float(self.rsfa_input.text())
+            self.RSFa = RSFa
+            self.P = P
+            
+            # Calculate basic parameters
+            t_rd = t_nom - LOSS
+            t_c = t_rd - FCA
+            D_o = D + 2 * t_nom if self.diameter_inside_radio.isChecked() else D
+            D = D_o - 2 * t_nom if self.diameter_outside_radio.isChecked() else D
+            R = D / 2
+            Rc = R + LOSS + FCA
+    
+            self.detailed_results.update({
+                'D': D, 't_nom': t_nom, 'LOSS': LOSS, 'FCA': FCA, 'Sa': Sa, 'P': P, 'E': E, 'RSFa': RSFa,
+                't_rd': t_rd, 't_c': t_c, 'D_o': D_o, 'R': R, 'Rc': Rc
+            })
+            
+            result = f"Level 2 Assessment for {corrosion_type}\n\n"
+    
+            if corrosion_type == "Widely scattered Pitting":
+                result += self.calculateWidelyScatteredPitting(D, t_nom, LOSS, FCA, Sa, P, E, RSFa, D_o, R, Rc, t_rd, t_c)
+            elif corrosion_type == "Localized Pitting":
+                result += self.calculateLocalizedPitting(D, t_nom, LOSS, FCA, Sa, P, E, RSFa, D_o, R, Rc, t_rd, t_c)
+            elif corrosion_type == "Pitting confined within a region of localized metal loss":
+                result += self.calculatePittingConfinedInLTA(D, t_nom, LOSS, FCA, Sa, P, E, RSFa, D_o, R, Rc, t_rd, t_c)
+            elif corrosion_type == "Region Of Local Metal Loss Located In An Area Of Widespread Pitting":
+                result += self.calculateLTAInWidespreadPitting(D, t_nom, LOSS, FCA, Sa, P, E, RSFa, D_o, R, Rc, t_rd, t_c)
+           
+            self.result_label.setText(result)
+            self.generate_report_button.setEnabled(True)
+    
+        except ValueError as e:
+            QMessageBox.critical(self, "Calculation Error", f"Invalid input: {str(e)}")
+        except Exception as e:
+            QMessageBox.critical(self, "Calculation Error", f"An error occurred during calculation: {str(e)}")
+    
+    def calculateWidelyScatteredPitting(self, D, t_nom, LOSS, FCA, Sa, P, E, RSFa, D_o, R, Rc, t_rd, t_c):
+        L = self.convert_units(float(self.tangent_to_tangent_length_input.text()), self.tangent_to_tangent_length_unit.currentText(), 'in')
+        H = self.convert_units(float(self.depth_of_head_input.text()), self.depth_of_head_unit.currentText(), 'in')
+        A = self.convert_units(float(self.distance_from_support_to_tangent_input.text()), self.distance_from_support_to_tangent_unit.currentText(), 'in')
+        Qs = self.convert_units(float(self.saddle_reaction_force_input.text()), self.saddle_reaction_force_unit.currentText(), 'lbf')
+        M = self.convert_units(float(self.mid_span_bending_moment_input.text()), self.mid_span_bending_moment_unit.currentText(), 'in-lbf')
+
+        R_m = (Rc + (D_o/2))/2
+        A_sl = 4 * H / L
+        t_sl = ((3 * Qs * L) / (Sa * E * math.pi * R_m**2)) * (((1 + ((2 * (R_m**2 - H**2)) / L**2)) / (1 + (4 * H) / (3 * L))) - (4 * (A / L)))
+
+        sigma_1 = (P / E) * ((Rc/t_c) + 0.6)
+        sigma_2 = (P / (2 * E)) * ((Rc / (t_c - t_sl)) - 0.4)
+
+        MAWP_C = (Sa * E * t_c) / (Rc + (0.6 * t_c))
+        MAWP_L = (2 * Sa * E * (t_c - t_sl)) / (Rc - 0.4 * (t_c - t_sl))
+        MAWP = min(MAWP_C, MAWP_L)
+
+        RSF_values = []
+        pit_calculations = []
+        for pit in self.inspection_data:
+            P_k, theta_k, d_i, w_i, d_j, w_j = pit[1:]
+            d_avg = (d_i + d_j) / 2
+            P_avg = (P_k - d_avg) / P_k
+            w_avg = (w_i + w_j) / 2
+            
+            rho_1 = sigma_1 / P_avg
+            rho_2 = sigma_2 / P_avg
+            
+            theta_rad = math.radians(theta_k)
+            psi = (
+                (math.cos(theta_rad)**4 + math.sin(2*theta_rad)**2) * rho_1**2 -
+                (3 * math.sin(2*theta_rad)**2 * rho_1 * rho_2) / 2 +
+                (math.sin(theta_rad)**4 + math.sin(2*theta_rad)**2) * rho_2**2
+            )
+            
+            phi = P_avg * max(abs(rho_1), abs(rho_2), abs(rho_1 - rho_2))
+            E_avg = min(phi / math.sqrt(psi), 1)
+            
+            RSF = 1 - (w_avg / t_c) * (1 - E_avg)
+            RSF_values.append(RSF)
+            pit_calculations.append({
+                "w_avg": w_avg,
+                "d_avg": d_avg,
+                "P_avg": P_avg,
+                "rho_1": rho_1,
+                "rho_2": rho_2,
+                "psi": psi,
+                "phi": phi,
+                "E_avg": E_avg,
+                "RSF": RSF
+            })
+
+        RSF_pit = sum(RSF_values) / len(RSF_values)
+        MAWP_r = MAWP * (RSF_pit / RSFa)
+
+        # Longitudinal stress calculations
+        B = min(RSF_pit / RSFa, 1.0)
+        t_eq = B * t_c
+        sigma_cm = (MAWP_r / (RSF_pit * math.cos(0))) * ((Rc / t_eq) + 0.6)
+
+        D_f = D_o - 2 * t_eq
+        I_x = (math.pi / 64) * (D_o**4 - D_f**4)
+        A_m = (math.pi / 4) * (D_o**2 - D_f**2)
+        A_t = (math.pi / 16) * (D_o + D_f)**2
+        a = D_o / 2
+        A_a = (math.pi / 4) * (D_f)**2
+
+        F = 0  # Assuming no axial force
+        sigma_lmt = (1 / (E * math.cos(0))) * (((A_a / A_m) * MAWP_r + (F / A_m) + ((M * a) / I_x)))
+        sigma_lmc = (1 / (E * math.cos(0))) * (((A_a / A_m) * MAWP_r + (F / A_m) - ((M * a) / I_x)))
+        
+        M_T = 0
+        V = 0
+        
+        tau = (M_T / (2 * A_t * t_eq)) + (V / A_m)
+        # Assuming no torsion or shear at midspan
+
+        sigma_et = math.sqrt(sigma_cm**2 + sigma_lmt**2 - sigma_cm*sigma_lmt + 3*tau**2)
+        sigma_ec = math.sqrt(sigma_cm**2 + sigma_lmc**2 - sigma_cm*sigma_lmc + 3*tau**2)
+
+        sigma_e_max = max(sigma_et, sigma_ec)
+        H_f = 1
+        sigma_allow = Sa * H_f / RSFa
+
+        # Store detailed results
+        self.detailed_results.update({
+            'L': L, 'H': H, 'A': A, 'Qs': Qs, 'M': M,
+            'R_m': R_m, 'A_sl': A_sl, 't_sl': t_sl,
+            'sigma_1': sigma_1, 'sigma_2': sigma_2,
+            'MAWP_C': MAWP_C, 'MAWP_L': MAWP_L, 'MAWP': MAWP,
+            'RSF_pit': RSF_pit, 'MAWP_r': MAWP_r,
+            'B': B, 't_eq': t_eq, 'sigma_cm': sigma_cm,
+            'I_x': I_x, 'A_m': A_m, 'A_t': A_t, 'A_a': A_a,
+            'sigma_lmt': sigma_lmt, 'sigma_lmc': sigma_lmc,
+            'sigma_et': sigma_et, 'sigma_ec': sigma_ec,
+            'sigma_e_max': sigma_e_max, 'sigma_allow': sigma_allow,
+            'RSF_values': RSF_values, 'pit_calculations': pit_calculations
+        })
+
+        pit_sizing_calculations = []
+        for i, data in enumerate(self.inspection_data, 1):
+            d_i, w_i, d_j, w_j = data[3], data[4], data[5], data[6]
+            
+            R_t_i = (t_c + FCA - w_i) / t_c
+            Q_1 = 1.123 * math.sqrt((((1 - R_t_i) / (1 - (R_t_i/RSFa)))**2) - 1)
+            d_allow_1 = Q_1 * math.sqrt(D * t_c)
+            
+            R_t_j = (t_c + FCA - w_j) / t_c
+            Q_2 = 1.123 * math.sqrt((((1 - R_t_j) / (1 - (R_t_j/RSFa)))**2) - 1)
+            d_allow_2 = Q_2 * math.sqrt(D * t_c)
+            
+            pit_sizing_calculations.append({
+                "pit_couple": i,
+                "R_t_i": R_t_i,
+                "Q_1": Q_1,
+                "d_allow_1": d_allow_1,
+                "d_i_ok": d_i <= d_allow_1,
+                "R_t_j": R_t_j,
+                "Q_2": Q_2,
+                "d_allow_2": d_allow_2,
+                "d_j_ok": d_j <= d_allow_2,
+                "R_t_ok": min(R_t_i, R_t_j) >= 0.20
+            })
+        
+        self.detailed_results['pit_sizing_calculations'] = pit_sizing_calculations
+
+        # Concise summary
+        result = f"RSF_pit = {RSF_pit:.4f}\n"
+        result += f"MAWP = {MAWP:.2f} psi\n"
+        result += f"Reduced MAWP = {MAWP_r:.2f} psi\n\n"
+        
+        if MAWP_r >= P:
+            result += f"The equipment passes the Level 2 assessment.\n"
+        else:
+            result += f"The equipment fails the Level 2 assessment at {P} psig.\n"
+            result += f"It is fit for service at a reduced MAWP of {MAWP_r:.1f} psig.\n"
+
+        return result
+            
+
+    def calculateLocalizedPitting(self, D, t_nom, LOSS, FCA, Sa, P, E, RSFa, D_o, R, Rc, t_rd, t_c):
+        s = self.convert_units(float(self.lta_length_input.text()), self.lta_length_unit.currentText(), 'in')
+        c = self.convert_units(float(self.lta_width_input.text()), self.lta_width_unit.currentText(), 'in')
+        L_msd = self.convert_units(float(self.distance_to_nearest_discontinuity_input.text()), self.distance_to_nearest_discontinuity_unit.currentText(), 'in')
+    
+        t_sl = 0  # No supplemental loads
+        sigma_1 = (P / E) * ((R / t_c) + 0.6)
+        sigma_2 = (P / (2 * E)) * ((R / (t_c - t_sl)) - 0.4)
+    
+        MAWP_C = (Sa * E * t_c) / (R + (0.6 * t_c))
+        MAWP_L = (2 * Sa * E * (t_c - t_sl)) / (R - (0.4 * (t_c - t_sl)))
+        MAWP = min(MAWP_C, MAWP_L)
+    
+        RSF_values = []
+        pit_calculations = []
+        for pit in self.inspection_data:
+            P_k, theta_k, d_i, w_i, d_j, w_j = map(float, pit[1:])
+            d_avg = (d_i + d_j) / 2
+            P_avg = (P_k - d_avg) / P_k
+            w_avg = (w_i + w_j) / 2
+            
+            rho_1 = sigma_1 / P_avg
+            rho_2 = sigma_2 / P_avg
+            
+            theta_rad = math.radians(theta_k)
+            psi = (
+                (math.cos(theta_rad)**4 + math.sin(2*theta_rad)**2) * rho_1**2 -
+                (3 * math.sin(2*theta_rad)**2 * rho_1 * rho_2) / 2 +
+                (math.sin(theta_rad)**4 + math.sin(2*theta_rad)**2) * rho_2**2
+            )
+            
+            phi = P_avg * max(abs(rho_1), abs(rho_2), abs(rho_1 - rho_2))
+            E_avg = min(phi / math.sqrt(psi), 1)
+            
+            RSF = 1 - (w_avg / t_c) * (1 - E_avg)
+            RSF_values.append(RSF)
+
+            pit_calculations.append({
+                "w_avg": w_avg,
+                "d_avg": d_avg,
+                "P_avg": P_avg,
+                "rho_1": rho_1,
+                "rho_2": rho_2,
+                "psi": psi,
+                "phi": phi,
+                "E_avg": E_avg,
+                "RSF": RSF
+            })
+            
+        RSF_pit = sum(RSF_values) / len(RSF_values)
+        t_eq = RSF_pit * t_c
+    
+        t_mm = t_eq  # Minimum pit depth
+        R_t = (t_mm) / t_c
+        lambda_s = (1.285 * s) / math.sqrt(D * t_c)
+        lambda_c = (1.285 * c) / math.sqrt(D * t_c)
+
+        # Check limiting flaw size criteria
+        flaw_acceptable = R_t >= 0.2 and (t_mm - FCA) >= 0.1 and s >= 1.8 * math.sqrt(D * t_c)
+    
+        if not flaw_acceptable:
+            return "The flaw is not acceptable per the Level 1 Assessment procedure."
+    
+        M_t = (1.0010 - 0.014195*lambda_s + 0.29090*lambda_s**2 - 0.096420*lambda_s**3 +
+               0.020890*lambda_s**4 - 0.0030540*lambda_s**5 + 2.9570e-4*lambda_s**6 -
+               1.8462e-5*lambda_s**7 + 7.1553e-7*lambda_s**8 - 1.5631e-8*lambda_s**9 +
+               1.4656e-10*lambda_s**10)
+    
+        RSF = (R_t) / (1 - (1 / M_t) * (1 - R_t))
+
+        # STEP 9.2 – Check if the following conditions are satisfied
+        conditions = [
+            lambda_c <= 9,
+            D/t_c >= 20,
+            0.7 <= RSF <= 1,
+            0.7 <= E <= 1,
+            0.7 <= E <= 1  # This condition is repeated in the original example
+        ]
+        all_conditions_satisfied = all(conditions)
+
+        if not all_conditions_satisfied:
+            return "The flaw is not acceptable per the Level 1 Assessment procedure."
+
+        TSF = (E / (2 * RSF)) * (1 + (math.sqrt(4 - 3 * E**2) / E))
+
+        # STEP 9.4 – Ask user to check against the screening curve
+        msg = f"Check Level 1 Screening Curve for the Maximum Allowable Circumferential Extent with the following values:\n\nλ_c = {lambda_c:.4f}\nR_t = {R_t:.4f}\nTSF = {TSF:.4f}\n\nIs the point on or above the screening curve?"
+        reply = QMessageBox.question(self, 'Screening Curve Check', msg, QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+        
+        circumferential_extent_flaw_acceptable = (reply == QMessageBox.Yes)
+        
+        if not circumferential_extent_flaw_acceptable:
+            return "The circumferential extent of the flaw is not acceptable per the Level 1 Assessment procedure based on the screening curve check."
+
+        
+        MAWPr = MAWP * (RSF / RSFa)
+        
+        pit_sizing_calculations = []
+        for i, data in enumerate(self.inspection_data, 1):
+            d_i, w_i, d_j, w_j = data[3], data[4], data[5], data[6]
+            
+            R_t_i = (t_c + FCA - w_i) / t_c
+            Q_1 = 1.123 * math.sqrt((((1 - R_t_i) / (1 - (R_t_i/RSFa)))**2) - 1)
+            d_allow_1 = Q_1 * math.sqrt(D * t_c)
+            
+            R_t_j = (t_c + FCA - w_j) / t_c
+            Q_2 = 1.123 * math.sqrt((((1 - R_t_j) / (1 - (R_t_j/RSFa)))**2) - 1)
+            d_allow_2 = Q_2 * math.sqrt(D * t_c)
+        
+            pit_sizing_calculations.append({
+                "pit_couple": i,
+                "R_t_i": R_t_i,
+                "Q_1": Q_1,
+                "d_allow_1": d_allow_1,
+                "d_i_ok": d_i <= d_allow_1,
+                "R_t_j": R_t_j,
+                "Q_2": Q_2,
+                "d_allow_2": d_allow_2,
+                "d_j_ok": d_j <= d_allow_2,
+                "R_t_ok": min(R_t_i, R_t_j) >= 0.20
+            })
+        
+        # Store detailed results
+        self.detailed_results = {
+            "t_rd": t_rd, "D_o": D_o, "Rc": Rc, "t_c": t_c, "P": P,
+            "s": s, "c": c, "L_msd": L_msd,"FCA": FCA, "D": D,
+            "sigma_1": sigma_1, "sigma_2": sigma_2,
+            "MAWP_C": MAWP_C, "MAWP_L": MAWP_L, "MAWP": MAWP,
+            "RSF_pit": RSF_pit, "t_eq": t_eq,
+            "t_mm": t_mm, "R_t": R_t, "lambda_s": lambda_s, "lambda_c": lambda_c,
+            "M_t": M_t, "RSF": RSF,
+            "all_conditions_satisfied": all_conditions_satisfied,
+            "conditions": conditions, "flaw_acceptable": flaw_acceptable,
+            "TSF": TSF, "circumferential_extent_flaw_acceptable":circumferential_extent_flaw_acceptable, "MAWPr": MAWPr,
+            "MAWPr": MAWPr, "RSF_values": RSF_values, "inspection_data": self.inspection_data, "pit_calculations": pit_calculations,
+            "pit_sizing_calculations": pit_sizing_calculations
+        }
+
+        # Concise summary
+        result = f"RSF = {RSF:.4f}\n"
+        result += f"MAWP = {MAWP:.2f} psi\n"
+        result += f"Reduced MAWP = {MAWPr:.2f} psi\n\n"
+        
+        if all_conditions_satisfied and circumferential_extent_flaw_acceptable:
+            if MAWPr >= P:
+                result += f"The equipment passes the Level 2 assessment.\n"
+            else:
+                result += f"The equipment fails the Level 2 assessment at {P} psi.\n"
+                result += f"It is fit for service at a reduced MAWP of {MAWPr:.1f} psi.\n"
+        else:
+            result += "Not all conditions are satisfied. The flaw is not acceptable per the Level 1 Assessment procedure.\n"
+    
+        return result
+            
+    def calculatePittingConfinedInLTA(self, D, t_nom, LOSS, FCA, Sa, P, E, RSFa, D_o, R, Rc, t_rd, t_c):
+        L = self.convert_units(float(self.tangent_to_tangent_length_input.text()), self.tangent_to_tangent_length_unit.currentText(), 'in')
+        total_weight = self.convert_units(float(self.total_weight_or_force_input.text()), self.total_weight_or_force_unit.currentText(), 'lbf')
+        Qs = self.convert_units(float(self.saddle_reaction_force_input.text()), self.saddle_reaction_force_unit.currentText(), 'lbf')
+        A = self.convert_units(float(self.length_from_tangent_to_saddle_input.text()), self.length_from_tangent_to_saddle_unit.currentText(), 'in')
+        H = self.convert_units(float(self.height_of_head_input.text()), self.height_of_head_unit.currentText(), 'in')
+        s = self.convert_units(float(self.lta_length_input.text()), self.lta_length_unit.currentText(), 'in')
+        c = self.convert_units(float(self.lta_width_input.text()), self.lta_width_unit.currentText(), 'in')
+        t_mm = self.convert_units(float(self.minimum_thickness_input.text()), self.minimum_thickness_unit.currentText(), 'in')
+
+        L_msd = L / 2
+        # STEP 1 - Determine parameters
+        self.detailed_results = {
+            "t_rd": t_rd, "D_o": D_o, "R": R, "L_msd": L_msd, "total_weight": total_weight,
+            "s": s, "c": c, "t_mm": t_mm, "D": D, "P": P, "L": L, "A": A, "Qs": Qs, "H": H
+        }
+    
+        # STEP 2 - Determine RSF for LTA
+        t_c = t_rd - FCA
+        R_t = (t_mm - FCA) / t_c
+        lambda_s = (1.285 * s) / math.sqrt(D * t_c)
+
+        # Check limiting flaw size criteria
+        flaw_acceptable = R_t >= 0.2 and (t_mm - FCA) >= 0.1 and L_msd >= 1.8 * math.sqrt(D * t_c)
+    
+        if not flaw_acceptable:
+            return "The flaw is not acceptable per the Level 1 Assessment procedure."
+        
+        def M_t(lambda_s):
+            return (1.0010 - 0.014195*lambda_s + 0.29090*lambda_s**2 - 0.096420*lambda_s**3 +
+                    0.020890*lambda_s**4 - 0.0030540*lambda_s**5 + 2.9570e-4*lambda_s**6 -
+                    1.8462e-5*lambda_s**7 + 7.1553e-7*lambda_s**8 - 1.5631e-8*lambda_s**9 +
+                    1.4656e-10*lambda_s**10)
+    
+        RSF_lta = R_t / (1 - (1 / M_t(lambda_s)) * (1 - R_t))
+        t_eq = t_rd * RSF_lta
+        
+        self.detailed_results.update({
+            "t_c": t_c, "R_t": R_t, "lambda_s": lambda_s,
+            "RSF_lta": RSF_lta, "t_eq": t_eq, "P": P
+        })
+    
+        # STEP 3 - Assess Pitting Damage
+        R_m = ((D / 2) + ((D_o / 2) - LOSS - FCA)) / 2
+        A_sl = 4 * H / L
+        t_sl = ((total_weight * L) / (4 * Sa * E * math.pi * R_m**2)) * (((1 + ((2 * (R_m**2 - H**2)) / L**2)) / (1 + (4 * H) / (3 * L))) - (4 * (A / L)))
+
+        MAWP_C = (Sa * E * t_c) / (R + 0.6 * t_c)
+        MAWP_L = (2 * Sa * E * (t_c - t_sl)) / (R - 0.4 * (t_c - t_sl))
+        MAWP = min(MAWP_C, MAWP_L)
+        
+
+        t_c = t_eq
+        sigma_1 = (P / E) * ((R / t_eq) + 0.6)
+        sigma_2 = (P / (2 * E)) * ((R / (t_eq - t_sl)) - 0.4)
+    
+        RSF_values = []
+        for pit in self.inspection_data:
+            P_k, theta_k, d_i, w_i, d_j, w_j = pit[1:]
+            d_avg = (d_i + d_j) / 2
+            P_avg = (P_k - d_avg) / P_k
+            w_avg = (w_i + w_j) / 2
+            
+            rho_1 = sigma_1 / P_avg
+            rho_2 = sigma_2 / P_avg
+            
+            theta_rad = math.radians(theta_k)
+            psi = (
+                (math.cos(theta_rad)**4 + math.sin(2*theta_rad)**2) * rho_1**2 -
+                (3 * math.sin(2*theta_rad)**2 * rho_1 * rho_2) / 2 +
+                (math.sin(theta_rad)**4 + math.sin(2*theta_rad)**2) * rho_2**2
+            )
+            
+            phi = P_avg * max(abs(rho_1), abs(rho_2), abs(rho_1 - rho_2))
+            E_avg = min(phi / math.sqrt(psi), 1)
+            
+            RSF = 1 - (w_avg / t_c) * (1 - E_avg)
+            RSF_values.append(RSF)
+    
+        RSF_pit = sum(RSF_values) / len(RSF_values)
+        RSF_comb = RSF_pit * RSF_lta
+    
+        self.detailed_results.update({
+            "R_m": R_m, "A_sl": A_sl, "t_sl": t_sl,
+            "sigma_1": sigma_1, "sigma_2": sigma_2,
+            "RSF_pit": RSF_pit, "RSF_comb": RSF_comb,
+            "RSF_values": RSF_values, "inspection_data": self.inspection_data
+        })
+
+        MAWP_r = min(MAWP, MAWP * (RSF_comb / RSFa))
+
+        # Calculate Table 6.4-3
+        pit_sizing_calculations = []
+        for i, data in enumerate(self.inspection_data, 1):
+            d_i, w_i, d_j, w_j = data[3], data[4], data[5], data[6]
+            
+            R_t_i = (t_c + FCA - w_i) / t_c
+            Q_1 = 1.123 * math.sqrt((((1 - R_t_i) / (1 - (R_t_i/RSFa)))**2) - 1)
+            d_allow_1 = Q_1 * math.sqrt(D * t_c)
+            
+            R_t_j = (t_c + FCA - w_j) / t_c
+            Q_2 = 1.123 * math.sqrt((((1 - R_t_j) / (1 - (R_t_j/RSFa)))**2) - 1)
+            d_allow_2 = Q_2 * math.sqrt(D * t_c)
+            
+            pit_sizing_calculations.append({
+                "pit_couple": i,
+                "R_t_i": R_t_i,
+                "Q_1": Q_1,
+                "d_allow_1": d_allow_1,
+                "d_i_ok": d_i <= d_allow_1,
+                "R_t_j": R_t_j,
+                "Q_2": Q_2,
+                "d_allow_2": d_allow_2,
+                "d_j_ok": d_j <= d_allow_2,
+                "R_t_ok": min(R_t_i, R_t_j) >= 0.20
+            })
+    
+        self.detailed_results["pit_sizing_calculations"] = pit_sizing_calculations
+        
+        # STEP 4 - Check circumferential extent
+        lambda_c = (1.285 * c) / math.sqrt(D * t_c)
+        
+        # STEP 9.2 – Check if the following conditions are satisfied
+        conditions = [
+            lambda_c <= 9,
+            D/t_c >= 20,
+            0.7 <= RSF_comb <= 1,
+            0.7 <= E <= 1,
+            0.7 <= E <= 1  # This condition is repeated in the original example
+        ]
+        all_conditions_satisfied = all(conditions)
+
+        if not all_conditions_satisfied:
+            return "The flaw is not acceptable per the Level 1 Assessment procedure."
+    
+        TSF = (1 / (2 * RSF_comb)) * (1 + (math.sqrt(4 - 3 * E**2) / E))
+    
+        self.detailed_results.update({
+            "lambda_c": lambda_c, "TSF": TSF,
+            "conditions": conditions,
+            "all_conditions_satisfied": all_conditions_satisfied
+        })
+    
+        # STEP 9.4 – Ask user to check against the screening curve
+        msg = f"Check Level 1 Screening Curve for the Maximum Allowable Circumferential Extent with the following values:\n\nλ_c = {lambda_c:.4f}\nR_t = {R_t:.4f}\nTSF = {TSF:.4f}\n\nIs the point on or above the screening curve?"
+        reply = QMessageBox.question(self, 'Screening Curve Check', msg, QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+        
+        circumferential_extent_flaw_acceptable = (reply == QMessageBox.Yes)
+        
+        if not circumferential_extent_flaw_acceptable:
+            return "The circumferential extent of the flaw is not acceptable per the Level 1 Assessment procedure based on the screening curve check."
+
+        self.detailed_results["circumferential_extent_flaw_acceptable"] = circumferential_extent_flaw_acceptable
+
+        
+        self.detailed_results.update({
+            "MAWP_C": MAWP_C, "MAWP_L": MAWP_L, "MAWP": MAWP, "MAWP_r": MAWP_r
+        })
+
+    
+        # Concise summary
+        result = f"RSF_lta = {RSF_lta:.4f}\n"
+        result += f"RSF_pit = {RSF_pit:.4f}\n"
+        result += f"RSF_combined = {RSF_comb:.4f}\n"
+        result += f"MAWP = {MAWP:.2f} psi\n"
+        result += f"Reduced MAWP = {MAWP_r:.2f} psi\n\n"
+        
+        if all_conditions_satisfied and circumferential_extent_flaw_acceptable:
+            if MAWP_r >= P:
+                result += f"The equipment passes the Level 2 assessment.\n"
+            else:
+                result += f"The equipment fails the Level 2 assessment at {P} psig.\n"
+                result += f"It is fit for service at a reduced MAWP of {MAWP_r:.1f} psig.\n"
+        else:
+            result += "The flaw is not acceptable per the Level 1 Assessment procedure.\n"
+
+    
+        return result
+        
+    def calculateLTAInWidespreadPitting(self, D, t_nom, LOSS, FCA, Sa, P, E, RSFa, D_o, R, Rc, t_rd, t_c):
+        L = self.convert_units(float(self.tangent_to_tangent_length_input.text()), self.tangent_to_tangent_length_unit.currentText(), 'in')
+        total_weight = self.convert_units(float(self.total_weight_or_force_input.text()), self.total_weight_or_force_unit.currentText(), 'lbf')
+        Qs = self.convert_units(float(self.saddle_reaction_force_input.text()), self.saddle_reaction_force_unit.currentText(), 'lbf')
+        A = self.convert_units(float(self.length_from_tangent_to_saddle_input.text()), self.length_from_tangent_to_saddle_unit.currentText(), 'in')
+        H = self.convert_units(float(self.height_of_head_input.text()), self.height_of_head_unit.currentText(), 'in')
+        s = self.convert_units(float(self.lta_length_input.text()), self.lta_length_unit.currentText(), 'in')
+        c = self.convert_units(float(self.lta_width_input.text()), self.lta_width_unit.currentText(), 'in')
+        t_mm = self.convert_units(float(self.minimum_thickness_input.text()), self.minimum_thickness_unit.currentText(), 'in')
+
+        L_msd = L / 2
+        # STEP 1 - Determine parameters
+        self.detailed_results = {
+            "t_rd": t_rd, "D_o": D_o, "R": R, "L_msd": L_msd, "total_weight": total_weight,
+            "s": s, "c": c, "t_mm": t_mm, "D": D, "P": P, "L": L, "A": A, "Qs": Qs, "H": H
+        }
+    
+        # STEP 2 - Determine RSF for LTA
+        t_c = t_rd - FCA
+        R_t = (t_mm - FCA) / t_c
+        lambda_s = (1.285 * s) / math.sqrt(D * t_c)
+
+        # Check limiting flaw size criteria
+        flaw_acceptable = R_t >= 0.2 and (t_mm - FCA) >= 0.1 and L_msd >= 1.8 * math.sqrt(D * t_c)
+    
+        if not flaw_acceptable:
+            return "The flaw is not acceptable per the Level 1 Assessment procedure."
+        
+        def M_t(lambda_s):
+            return (1.0010 - 0.014195*lambda_s + 0.29090*lambda_s**2 - 0.096420*lambda_s**3 +
+                    0.020890*lambda_s**4 - 0.0030540*lambda_s**5 + 2.9570e-4*lambda_s**6 -
+                    1.8462e-5*lambda_s**7 + 7.1553e-7*lambda_s**8 - 1.5631e-8*lambda_s**9 +
+                    1.4656e-10*lambda_s**10)
+    
+        RSF_lta = R_t / (1 - (1 / M_t(lambda_s)) * (1 - R_t))
+        t_eq = t_rd * RSF_lta
+        
+        self.detailed_results.update({
+            "t_c": t_c, "R_t": R_t, "lambda_s": lambda_s,
+            "RSF_lta": RSF_lta, "t_eq": t_eq, "P": P
+        })
+    
+        # STEP 3 - Assess Pitting Damage
+        R_m = ((D / 2) + ((D_o / 2) - LOSS - FCA)) / 2
+        A_sl = 4 * H / L
+        t_sl = ((total_weight * L) / (4 * Sa * E * math.pi * R_m**2)) * (((1 + ((2 * (R_m**2 - H**2)) / L**2)) / (1 + (4 * H) / (3 * L))) - (4 * (A / L)))
+
+        MAWP_C = (Sa * E * t_c) / (R + 0.6 * t_c)
+        MAWP_L = (2 * Sa * E * (t_c - t_sl)) / (R - 0.4 * (t_c - t_sl))
+        MAWP = min(MAWP_C, MAWP_L)
+        
+
+        t_c = t_eq
+        sigma_1 = (P / E) * ((R / t_eq) + 0.6)
+        sigma_2 = (P / (2 * E)) * ((R / (t_eq - t_sl)) - 0.4)
+    
+        RSF_values = []
+        for pit in self.inspection_data:
+            P_k, theta_k, d_i, w_i, d_j, w_j = pit[1:]
+            d_avg = (d_i + d_j) / 2
+            P_avg = (P_k - d_avg) / P_k
+            w_avg = (w_i + w_j) / 2
+            
+            rho_1 = sigma_1 / P_avg
+            rho_2 = sigma_2 / P_avg
+            
+            theta_rad = math.radians(theta_k)
+            psi = (
+                (math.cos(theta_rad)**4 + math.sin(2*theta_rad)**2) * rho_1**2 -
+                (3 * math.sin(2*theta_rad)**2 * rho_1 * rho_2) / 2 +
+                (math.sin(theta_rad)**4 + math.sin(2*theta_rad)**2) * rho_2**2
+            )
+            
+            phi = P_avg * max(abs(rho_1), abs(rho_2), abs(rho_1 - rho_2))
+            E_avg = min(phi / math.sqrt(psi), 1)
+            
+            RSF = 1 - (w_avg / t_c) * (1 - E_avg)
+            RSF_values.append(RSF)
+    
+        RSF_pit = sum(RSF_values) / len(RSF_values)
+        RSF_comb = RSF_pit * RSF_lta
+    
+        self.detailed_results.update({
+            "R_m": R_m, "A_sl": A_sl, "t_sl": t_sl,
+            "sigma_1": sigma_1, "sigma_2": sigma_2,
+            "RSF_pit": RSF_pit, "RSF_comb": RSF_comb,
+            "RSF_values": RSF_values, "inspection_data": self.inspection_data
+        })
+
+        MAWP_r = min(MAWP, MAWP * (RSF_comb / RSFa))
+
+        # Calculate Table 6.4-3
+        pit_sizing_calculations = []
+        for i, data in enumerate(self.inspection_data, 1):
+            d_i, w_i, d_j, w_j = data[3], data[4], data[5], data[6]
+            
+            R_t_i = (t_c + FCA - w_i) / t_c
+            Q_1 = 1.123 * math.sqrt((((1 - R_t_i) / (1 - (R_t_i/RSFa)))**2) - 1)
+            d_allow_1 = Q_1 * math.sqrt(D * t_c)
+            
+            R_t_j = (t_c + FCA - w_j) / t_c
+            Q_2 = 1.123 * math.sqrt((((1 - R_t_j) / (1 - (R_t_j/RSFa)))**2) - 1)
+            d_allow_2 = Q_2 * math.sqrt(D * t_c)
+            
+            pit_sizing_calculations.append({
+                "pit_couple": i,
+                "R_t_i": R_t_i,
+                "Q_1": Q_1,
+                "d_allow_1": d_allow_1,
+                "d_i_ok": d_i <= d_allow_1,
+                "R_t_j": R_t_j,
+                "Q_2": Q_2,
+                "d_allow_2": d_allow_2,
+                "d_j_ok": d_j <= d_allow_2,
+                "R_t_ok": min(R_t_i, R_t_j) >= 0.20
+            })
+    
+        self.detailed_results["pit_sizing_calculations"] = pit_sizing_calculations
+        
+        # STEP 4 - Check circumferential extent
+        lambda_c = (1.285 * c) / math.sqrt(D * t_c)
+        
+        # STEP 9.2 – Check if the following conditions are satisfied
+        conditions = [
+            lambda_c <= 9,
+            D/t_c >= 20,
+            0.7 <= RSF_comb <= 1,
+            0.7 <= E <= 1,
+            0.7 <= E <= 1  # This condition is repeated in the original example
+        ]
+        all_conditions_satisfied = all(conditions)
+
+        if not all_conditions_satisfied:
+            return "The flaw is not acceptable per the Level 1 Assessment procedure."
+    
+        TSF = (1 / (2 * RSF_comb)) * (1 + (math.sqrt(4 - 3 * E**2) / E))
+    
+        self.detailed_results.update({
+            "lambda_c": lambda_c, "TSF": TSF,
+            "conditions": conditions,
+            "all_conditions_satisfied": all_conditions_satisfied
+        })
+    
+        # STEP 9.4 – Ask user to check against the screening curve
+        msg = f"Check Level 1 Screening Curve for the Maximum Allowable Circumferential Extent with the following values:\n\nλ_c = {lambda_c:.4f}\nR_t = {R_t:.4f}\nTSF = {TSF:.4f}\n\nIs the point on or above the screening curve?"
+        reply = QMessageBox.question(self, 'Screening Curve Check', msg, QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+        
+        circumferential_extent_flaw_acceptable = (reply == QMessageBox.Yes)
+        
+        if not circumferential_extent_flaw_acceptable:
+            return "The circumferential extent of the flaw is not acceptable per the Level 1 Assessment procedure based on the screening curve check."
+
+        self.detailed_results["circumferential_extent_flaw_acceptable"] = circumferential_extent_flaw_acceptable
+
+        
+        self.detailed_results.update({
+            "MAWP_C": MAWP_C, "MAWP_L": MAWP_L, "MAWP": MAWP, "MAWP_r": MAWP_r
+        })
+
+    
+        # Concise summary
+        result = f"RSF_lta = {RSF_lta:.4f}\n"
+        result += f"RSF_pit = {RSF_pit:.4f}\n"
+        result += f"RSF_combined = {RSF_comb:.4f}\n"
+        result += f"MAWP = {MAWP:.2f} psi\n"
+        result += f"Reduced MAWP = {MAWP_r:.2f} psi\n\n"
+        
+        if all_conditions_satisfied and circumferential_extent_flaw_acceptable:
+            if MAWP_r >= P:
+                result += f"The equipment passes the Level 2 assessment.\n"
+            else:
+                result += f"The equipment fails the Level 2 assessment at {P} psig.\n"
+                result += f"It is fit for service at a reduced MAWP of {MAWP_r:.1f} psig.\n"
+        else:
+            result += "The flaw is not acceptable per the Level 1 Assessment procedure.\n"
+
+    
+        return result
+        
+    def generateDetailedReport(self):
+        if not hasattr(self, 'detailed_results'):
+            QMessageBox.warning(self, "No Data", "Please perform calculations first.")
+            return
+    
+        corrosion_type = self.corrosion_type_combobox.currentText()
+    
+        try:
+            if corrosion_type == "Widely scattered Pitting":
+                self.generateWidelyScatteredPittingReport()
+            elif corrosion_type == "Localized Pitting":
+                self.generateLocalizedPittingReport()
+            elif corrosion_type == "Pitting confined within a region of localized metal loss":
+                self.generatePittingConfinedInLTAReport()
+            elif corrosion_type == "Region Of Local Metal Loss Located In An Area Of Widespread Pitting":
+                self.generateLTAInWidespreadPittingReport()
+            else:
+                raise ValueError(f"Unknown corrosion type: {corrosion_type}")
+    
+        except Exception as e:
+            QMessageBox.critical(self, "Report Generation Error", f"An error occurred while generating the report: {str(e)}")
+
+    def generateWidelyScatteredPittingReport(self):
+        file_name, _ = QFileDialog.getSaveFileName(self, "Save Detailed Report", "", "PDF Files (*.pdf);;All Files (*)")
+        if not file_name:
+            return
+    
+        doc = SimpleDocTemplate(file_name, pagesize=letter, rightMargin=72, leftMargin=72, topMargin=72, bottomMargin=18)
+        story = []
+    
+        # Styles
+        styles = getSampleStyleSheet()
+        styles['Title'].fontSize = 16
+        styles['Title'].alignment = TA_CENTER
+        styles['Title'].spaceAfter = 12
+        styles['Heading1'].fontSize = 14
+        styles['Heading1'].spaceAfter = 6
+        styles['Heading2'].fontSize = 12
+        styles['Heading2'].spaceAfter = 6
+        styles['BodyText'].fontName = 'Times-Roman'
+        styles['BodyText'].fontSize = 11
+        styles['BodyText'].leading = 13
+        styles['Normal'].fontName = 'Helvetica'
+        styles['Normal'].fontSize = 9
+    
+        # Title
+        story.append(Paragraph("Level 2 Assessment for Widely Scattered Pitting", styles['Title']))
+        story.append(Spacer(1, 0.25*inch))
+    
+        # Input Parameters
+        story.append(Paragraph("Input Parameters", styles['Heading1']))
+        diameter_unit = self.diameter_unit.currentText()
+        thickness_unit = self.wall_thickness_unit.currentText()
+        pressure_unit = self.design_pressure_unit.currentText()
+        stress_unit = self.allowable_stress_unit.currentText()
+        force_unit = self.saddle_reaction_force_unit.currentText()
+        moment_unit = self.mid_span_bending_moment_unit.currentText()
+        length_unit = self.tangent_to_tangent_length_unit.currentText()
+    
+        input_data = [
+            ["Parameter", "Value", "Unit"],
+            ["Material", self.material_combobox.currentText(), "-"],
+            ["Design Code", self.design_code_combobox.currentText(), "-"],
+            ["Diameter", f"{self.convert_units(self.detailed_results['D'], 'in', diameter_unit):.4f}", diameter_unit],
+            ["Wall Thickness", f"{self.convert_units(self.detailed_results['t_c'], 'in', thickness_unit):.4f}", thickness_unit],
+            ["Design Pressure", f"{self.convert_units(self.detailed_results['P'], 'psi', pressure_unit):.2f}", pressure_unit],
+            ["Allowable Stress", f"{self.convert_units(self.detailed_results['Sa'], 'psi', stress_unit):.2f}", stress_unit],
+            ["Saddle Reaction Force", f"{self.convert_units(self.detailed_results['Qs'], 'lbf', force_unit):.2f}", force_unit],
+            ["Mid Span Bending Moment", f"{self.convert_units(self.detailed_results['M'], 'in-lbf', moment_unit):.2f}", moment_unit],
+            ["Tangent-to-Tangent Length", f"{self.convert_units(self.detailed_results['L'], 'in', length_unit):.2f}", length_unit],
+        ]
+        story.append(self.create_table(input_data, "Input Parameters"))
+        story.append(Spacer(1, 0.25*inch))
+    
+        # STEP 1
+        story.append(Paragraph("STEP 1 – Determine the following parameters", styles['Heading2']))
+        step1_data = [
+            ["Parameter", "Value", "Unit"],
+            ["t_rd", f"{self.convert_units(self.detailed_results['t_rd'], 'in', thickness_unit):.4f}", thickness_unit],
+            ["D_o", f"{self.convert_units(self.detailed_results['D_o'], 'in', diameter_unit):.2f}", diameter_unit],
+            ["R", f"{self.convert_units(self.detailed_results['R'], 'in', diameter_unit):.2f}", diameter_unit],
+        ]
+        story.append(self.create_table(step1_data, "Step 1 Parameters"))
+        story.append(Spacer(1, 0.25*inch))
+    
+        # STEP 2
+        story.append(Paragraph("STEP 2 – Determine the wall thickness to be used in the assessment", styles['Heading2']))
+        story.append(Paragraph(f"t_c = {self.convert_units(self.detailed_results['t_c'], 'in', thickness_unit):.4f} {thickness_unit}", styles['BodyText']))
+        story.append(Spacer(1, 0.25*inch))
+    
+        # STEP 5
+        story.append(Paragraph("STEP 5 – Calculate the components of the membrane stress field", styles['Heading2']))
+        step5_data = [
+            ["Parameter", "Value", "Unit"],
+            ["R_m", f"{self.convert_units(self.detailed_results['R_m'], 'in', diameter_unit):.4f}", diameter_unit],
+            ["A_sl", f"{self.detailed_results['A_sl']:.4f}", "-"],
+            ["t_sl", f"{self.convert_units(self.detailed_results['t_sl'], 'in', thickness_unit):.4f}", thickness_unit],
+            ["σ_1", f"{self.convert_units(self.detailed_results['sigma_1'], 'psi', stress_unit):.4f}", stress_unit],
+            ["σ_2", f"{self.convert_units(self.detailed_results['sigma_2'], 'psi', stress_unit):.4f}", stress_unit],
+        ]
+        story.append(self.create_table(step5_data, "Step 5 Calculations"))
+        story.append(Spacer(1, 0.25*inch))
+    
+        # STEP 6
+        story.append(Paragraph("STEP 6 – Determine the MAWP for the component", styles['Heading2']))
+        step6_data = [
+            ["Parameter", "Value", "Unit"],
+            ["MAWP_C", f"{self.convert_units(self.detailed_results['MAWP_C'], 'psi', pressure_unit):.2f}", pressure_unit],
+            ["MAWP_L", f"{self.convert_units(self.detailed_results['MAWP_L'], 'psi', pressure_unit):.2f}", pressure_unit],
+            ["MAWP", f"{self.convert_units(self.detailed_results['MAWP'], 'psi', pressure_unit):.2f}", pressure_unit],
+        ]
+        story.append(self.create_table(step6_data, "Step 6 MAWP Calculations"))
+        story.append(Spacer(1, 0.25*inch))
+    
+        # STEP 7 and 8
+        story.append(Paragraph("STEP 7 & 8 – Calculate the Remaining Strength Factor for each pit-couple", styles['Heading2']))
+        pit_data = [["Pit Couple", "w_avg", "d_avg", "P_avg", "ρ_1", "ρ_2", "ψ", "Φ", "E_avg", "RSF"]]
+        for i, calc in enumerate(self.detailed_results['pit_calculations'], 1):
+            pit_data.append([
+                str(i),
+                f"{self.convert_units(calc['w_avg'], 'in', thickness_unit):.4f}",
+                f"{self.convert_units(calc['d_avg'], 'in', thickness_unit):.4f}",
+                f"{calc['P_avg']:.4f}",
+                f"{self.convert_units(calc['rho_1'], 'psi', stress_unit):.4f}",
+                f"{self.convert_units(calc['rho_2'], 'psi', stress_unit):.4f}",
+                f"{calc['psi']:.4f}",
+                f"{calc['phi']:.4f}",
+                f"{calc['E_avg']:.4f}",
+                f"{calc['RSF']:.4f}"
+            ])
+        story.append(self.create_table(pit_data, "Pit Couple Calculations"))
+        story.append(Spacer(1, 0.25*inch))
+    
+        story.append(Paragraph(f"RSF_pit = {self.detailed_results['RSF_pit']:.4f}", styles['BodyText']))
+        story.append(Spacer(1, 0.25*inch))
+    
+        # STEP 9
+        story.append(Paragraph("STEP 9 – Evaluate results based on the type of pitting damage", styles['Heading2']))
+        story.append(Paragraph(f"MAWP_r = {self.convert_units(self.detailed_results['MAWP_r'], 'psi', pressure_unit):.4f} {pressure_unit}", styles['BodyText']))
+        story.append(Spacer(1, 0.25*inch))
+    
+        # STEP 10
+        story.append(Paragraph("STEP 10 – Check the recommended limitations on the individual pit dimensions", styles['Heading2']))
+        pit_sizing_data = [["Pit Couple", "R_t,i", "Q_1k", "Q_1√(D*t_c)", "d_a1 Ok?", "R_t,j", "Q_2k", "Q_2√(D*t_c)", "d_a2 Ok?", "R_t ≥ 0.20"]]
+        for calc in self.detailed_results['pit_sizing_calculations']:
+            pit_sizing_data.append([
+                str(calc['pit_couple']),
+                f"{calc['R_t_i']:.4f}",
+                f"{calc['Q_1']:.4f}",
+                f"{self.convert_units(calc['d_allow_1'], 'in', thickness_unit):.4f}",
+                "Yes" if calc['d_i_ok'] else "No",
+                f"{calc['R_t_j']:.4f}",
+                f"{calc['Q_2']:.4f}",
+                f"{self.convert_units(calc['d_allow_2'], 'in', thickness_unit):.4f}",
+                "Yes" if calc['d_j_ok'] else "No",
+                "Yes" if calc['R_t_ok'] else "No"
+            ])
+        story.append(self.create_table(pit_sizing_data, "Pit Sizing Calculations"))
+        story.append(Spacer(1, 0.25*inch))
+    
+        # Longitudinal Stress Assessment
+        story.append(Paragraph("Longitudinal Stress Direction Assessment", styles['Heading1']))
+        long_stress_data = [
+            ["Parameter", "Value", "Unit"],
+            ["σ_cm", f"{self.convert_units(self.detailed_results['sigma_cm'], 'psi', stress_unit):.4f}", stress_unit],
+            ["σ_lmt", f"{self.convert_units(self.detailed_results['sigma_lmt'], 'psi', stress_unit):.4f}", stress_unit],
+            ["σ_lmc", f"{self.convert_units(self.detailed_results['sigma_lmc'], 'psi', stress_unit):.4f}", stress_unit],
+            ["σ_et", f"{self.convert_units(self.detailed_results['sigma_et'], 'psi', stress_unit):.4f}", stress_unit],
+            ["σ_ec", f"{self.convert_units(self.detailed_results['sigma_ec'], 'psi', stress_unit):.4f}", stress_unit],
+            ["Maximum equivalent stress", f"{self.convert_units(self.detailed_results['sigma_e_max'], 'psi', stress_unit):.4f}", stress_unit],
+            ["Allowable stress", f"{self.convert_units(self.detailed_results['sigma_allow'], 'psi', stress_unit):.4f}", stress_unit],
+        ]
+        story.append(self.create_table(long_stress_data, "Longitudinal Stress Assessment"))
+        story.append(Spacer(1, 0.25*inch))
+    
+        # Summary
+        story.append(Paragraph("SUMMARY", styles['Heading1']))
+        MAWP_r = self.convert_units(self.detailed_results['MAWP_r'], 'psi', pressure_unit)
+        story.append(Paragraph(f"MAWP_r = {MAWP_r:.3f} {pressure_unit}", styles['BodyText']))
+        design_pressure = self.convert_units(self.detailed_results['P'], 'psi', pressure_unit)
+        if MAWP_r >= design_pressure:
+            conclusion = f"The longitudinal stress is acceptable. The equipment passes the level 2 assessment at {design_pressure:.2f} {pressure_unit}."
+        else:
+            conclusion = f"The longitudinal stress is acceptable. The equipment fails the level 2 assessment at {design_pressure:.2f} {pressure_unit}, "
+            conclusion += f"but it is fit for service at a reduced MAWP of {MAWP_r:.1f} {pressure_unit}."
+        story.append(Paragraph(conclusion, styles['BodyText']))
+    
+        # Build PDF
+        doc.build(story, onFirstPage=self.addPageNumber, onLaterPages=self.addPageNumber)
+        
+    def generateLocalizedPittingReport(self):
+        file_name, _ = QFileDialog.getSaveFileName(self, "Save Detailed Report", "", "PDF Files (*.pdf);;All Files (*)")
+        if not file_name:
+            return
+    
+        doc = SimpleDocTemplate(file_name, pagesize=letter, rightMargin=72, leftMargin=72, topMargin=72, bottomMargin=18)
+        story = []
+    
+        # Styles
+        styles = getSampleStyleSheet()
+        styles['Title'].fontSize = 16
+        styles['Title'].alignment = TA_CENTER
+        styles['Title'].spaceAfter = 12
+        styles['Heading1'].fontSize = 14
+        styles['Heading1'].spaceAfter = 6
+        styles['Heading2'].fontSize = 12
+        styles['Heading2'].spaceAfter = 6
+        styles['BodyText'].fontName = 'Times-Roman'
+        styles['BodyText'].fontSize = 11
+        styles['BodyText'].leading = 13
+        styles['Normal'].fontName = 'Helvetica'
+        styles['Normal'].fontSize = 9
+    
+        # Title
+        story.append(Paragraph("Level 2 Assessment for Localized Pitting", styles['Title']))
+        story.append(Spacer(1, 0.25*inch))
+    
+        # Input Parameters
+        story.append(Paragraph("Input Parameters", styles['Heading1']))
+        diameter_unit = self.diameter_unit.currentText()
+        thickness_unit = self.wall_thickness_unit.currentText()
+        pressure_unit = self.design_pressure_unit.currentText()
+        stress_unit = self.allowable_stress_unit.currentText()
+        length_unit = self.lta_length_unit.currentText()
+    
+        input_data = [
+            ["Parameter", "Value", "Unit"],
+            ["Material", self.material_combobox.currentText(), "-"],
+            ["Design Code", self.design_code_combobox.currentText(), "-"],
+            ["Diameter", f"{self.convert_units(self.detailed_results['D'], 'in', diameter_unit):.4f}", diameter_unit],
+            ["Wall Thickness", f"{self.convert_units(self.detailed_results['t_c'], 'in', thickness_unit):.4f}", thickness_unit],
+            ["Design Pressure", f"{self.convert_units(self.detailed_results['P'], 'psi', pressure_unit):.2f}", pressure_unit],
+            ["LTA Length", f"{self.convert_units(self.detailed_results['s'], 'in', length_unit):.4f}", length_unit],
+            ["LTA Width", f"{self.convert_units(self.detailed_results['c'], 'in', length_unit):.4f}", length_unit],
+            ["Distance to Nearest Discontinuity", f"{self.convert_units(self.detailed_results['L_msd'], 'in', length_unit):.4f}", length_unit],
+        ]
+        story.append(self.create_table(input_data, "Input Parameters"))
+        story.append(Spacer(1, 0.25*inch))
+    
+        # STEP 1
+        story.append(Paragraph("STEP 1 – Determine the following parameters", styles['Heading2']))
+        step1_data = [
+            ["Parameter", "Value", "Unit"],
+            ["t_rd", f"{self.convert_units(self.detailed_results['t_rd'], 'in', thickness_unit):.4f}", thickness_unit],
+            ["D_o", f"{self.convert_units(self.detailed_results['D_o'], 'in', diameter_unit):.2f}", diameter_unit],
+            ["Rc", f"{self.convert_units(self.detailed_results['Rc'], 'in', diameter_unit):.2f}", diameter_unit],
+        ]
+        story.append(self.create_table(step1_data, "Step 1 Parameters"))
+        story.append(Spacer(1, 0.25*inch))
+    
+        # STEP 2
+        story.append(Paragraph("STEP 2 – Determine the wall thickness to be used in the assessment", styles['Heading2']))
+        story.append(Paragraph(f"t_c = {self.convert_units(self.detailed_results['t_c'], 'in', thickness_unit):.4f} {thickness_unit}", styles['BodyText']))
+        story.append(Spacer(1, 0.25*inch))
+    
+        # STEP 3
+        story.append(Paragraph("STEP 3 – Determine the minimum measured thickness in the LTA and the dimension, s", styles['Heading2']))
+        step3_data = [
+            ["Parameter", "Value", "Unit"],
+            ["t_mm", f"{self.convert_units(self.detailed_results['t_mm'], 'in', thickness_unit):.4f}", thickness_unit],
+            ["s", f"{self.convert_units(self.detailed_results['s'], 'in', length_unit):.4f}", length_unit],
+        ]
+        story.append(self.create_table(step3_data, "Step 3 Parameters"))
+        story.append(Spacer(1, 0.25*inch))
+    
+        # STEP 4
+        story.append(Paragraph("STEP 4 – Determine the remaining thickness ratio and the longitudinal flaw length parameter", styles['Heading2']))
+        story.append(Paragraph(f"R_t = {self.detailed_results['R_t']:.4f}", styles['BodyText']))
+        story.append(Paragraph(f"λ = {self.detailed_results['lambda_s']:.4f}", styles['BodyText']))
+        story.append(Spacer(1, 0.25*inch))
+    
+        # STEP 5
+        story.append(Paragraph("STEP 5 – Calculate the components of the membrane stress field", styles['Heading2']))
+        step5_data = [
+            ["Parameter", "Value", "Unit"],
+            ["σ_1", f"{self.convert_units(self.detailed_results['sigma_1'], 'psi', stress_unit):.4f}", stress_unit],
+            ["σ_2", f"{self.convert_units(self.detailed_results['sigma_2'], 'psi', stress_unit):.4f}", stress_unit],
+        ]
+        story.append(self.create_table(step5_data, "Step 5 Calculations"))
+        story.append(Spacer(1, 0.25*inch))
+    
+        # STEP 6
+        story.append(Paragraph("STEP 6 – Determine the MAWP for the component", styles['Heading2']))
+        step6_data = [
+            ["Parameter", "Value", "Unit"],
+            ["MAWP_C", f"{self.convert_units(self.detailed_results['MAWP_C'], 'psi', pressure_unit):.2f}", pressure_unit],
+            ["MAWP_L", f"{self.convert_units(self.detailed_results['MAWP_L'], 'psi', pressure_unit):.2f}", pressure_unit],
+            ["MAWP", f"{self.convert_units(self.detailed_results['MAWP'], 'psi', pressure_unit):.2f}", pressure_unit],
+        ]
+        story.append(self.create_table(step6_data, "Step 6 MAWP Calculations"))
+        story.append(Spacer(1, 0.25*inch))
+    
+        # STEP 7 and 8
+        story.append(Paragraph("STEP 7 & 8 – Calculate the Remaining Strength Factor for each pit-couple", styles['Heading2']))
+        pit_data = [["Pit Couple", "w_avg", "d_avg", "P_avg", "ρ_1", "ρ_2", "ψ", "Φ", "E_avg", "RSF"]]
+        for i, calc in enumerate(self.detailed_results['pit_calculations'], 1):
+            pit_data.append([
+                str(i),
+                f"{self.convert_units(calc['w_avg'], 'in', thickness_unit):.4f}",
+                f"{self.convert_units(calc['d_avg'], 'in', thickness_unit):.4f}",
+                f"{calc['P_avg']:.4f}",
+                f"{self.convert_units(calc['rho_1'], 'psi', stress_unit):.4f}",
+                f"{self.convert_units(calc['rho_2'], 'psi', stress_unit):.4f}",
+                f"{calc['psi']:.4f}",
+                f"{calc['phi']:.4f}",
+                f"{calc['E_avg']:.4f}",
+                f"{calc['RSF']:.4f}"
+            ])
+        story.append(self.create_table(pit_data, "Pit Couple Calculations"))
+        story.append(Spacer(1, 0.25*inch))
+    
+        story.append(Paragraph(f"RSF_pit = {self.detailed_results['RSF_pit']:.4f}", styles['BodyText']))
+        story.append(Spacer(1, 0.25*inch))
+    
+        # STEP 9
+        story.append(Paragraph("STEP 9 – Evaluate the circumferential extent of the flaw", styles['Heading2']))
+        story.append(Paragraph(f"λ_c = {self.detailed_results['lambda_c']:.4f}", styles['BodyText']))
+        story.append(Paragraph(f"TSF = {self.detailed_results['TSF']:.4f}", styles['BodyText']))
+        story.append(Spacer(1, 0.25*inch))
+    
+        # STEP 10
+        story.append(Paragraph("STEP 10 – Check the recommended limitations on the individual pit dimensions", styles['Heading2']))
+        pit_sizing_data = [["Pit Couple", "R_t,i", "Q_1k", "Q_1√(D*t_c)", "d_a1 Ok?", "R_t,j", "Q_2k", "Q_2√(D*t_c)", "d_a2 Ok?", "R_t ≥ 0.20"]]
+        for calc in self.detailed_results['pit_sizing_calculations']:
+            pit_sizing_data.append([
+                str(calc['pit_couple']),
+                f"{calc['R_t_i']:.4f}",
+                f"{calc['Q_1']:.4f}",
+                f"{self.convert_units(calc['d_allow_1'], 'in', thickness_unit):.4f}",
+                "Yes" if calc['d_i_ok'] else "No",
+                f"{calc['R_t_j']:.4f}",
+                f"{calc['Q_2']:.4f}",
+                f"{self.convert_units(calc['d_allow_2'], 'in', thickness_unit):.4f}",
+                "Yes" if calc['d_j_ok'] else "No",
+                "Yes" if calc['R_t_ok'] else "No"
+            ])
+        story.append(self.create_table(pit_sizing_data, "Pit Sizing Calculations"))
+        story.append(Spacer(1, 0.25*inch))
+    
+        # Summary
+        story.append(Paragraph("SUMMARY", styles['Heading1']))
+        MAWP_r = self.convert_units(self.detailed_results['MAWPr'], 'psi', pressure_unit)
+        story.append(Paragraph(f"MAWP_r = {MAWP_r:.3f} {pressure_unit}", styles['BodyText']))
+        if 'P' in self.detailed_results:
+            design_pressure = self.convert_units(self.detailed_results['P'], 'psi', pressure_unit)
+        else:
+            # Assuming you have stored the input design pressure somewhere, e.g., self.design_pressure
+            design_pressure = self.convert_units(self.design_pressure, self.design_pressure_unit.currentText(), pressure_unit)
+        
+        if MAWP_r >= design_pressure:
+            conclusion = f"The equipment passes the level 2 assessment at {design_pressure:.2f} {pressure_unit}."
+        else:
+            conclusion = f"The equipment fails the level 2 assessment at {design_pressure:.2f} {pressure_unit}, "
+            conclusion += f"but it is fit for service at a reduced MAWP of {MAWP_r:.1f} {pressure_unit}."
+        story.append(Paragraph(conclusion, styles['BodyText']))
+    
+        # Build PDF
+        doc.build(story, onFirstPage=self.addPageNumber, onLaterPages=self.addPageNumber)
+        
+    def generatePittingConfinedInLTAReport(self):
+        file_name, _ = QFileDialog.getSaveFileName(self, "Save Detailed Report", "", "PDF Files (*.pdf);;All Files (*)")
+        if not file_name:
+            return
+    
+        doc = SimpleDocTemplate(file_name, pagesize=letter, rightMargin=72, leftMargin=72, topMargin=72, bottomMargin=18)
+        story = []
+    
+        # Styles
+        styles = getSampleStyleSheet()
+        styles['Title'].fontSize = 16
+        styles['Title'].alignment = TA_CENTER
+        styles['Title'].spaceAfter = 12
+        styles['Heading1'].fontSize = 14
+        styles['Heading1'].spaceAfter = 6
+        styles['Heading2'].fontSize = 12
+        styles['Heading2'].spaceAfter = 6
+        styles['BodyText'].fontName = 'Times-Roman'
+        styles['BodyText'].fontSize = 11
+        styles['BodyText'].leading = 13
+        styles['Normal'].fontName = 'Helvetica'
+        styles['Normal'].fontSize = 9
+    
+        # Title
+        story.append(Paragraph("Level 2 Assessment for Pitting confined within a region of localized metal loss", styles['Title']))
+        story.append(Spacer(1, 0.25*inch))
+    
+        # Input Parameters
+        story.append(Paragraph("Input Parameters", styles['Heading1']))
+        diameter_unit = self.diameter_unit.currentText()
+        thickness_unit = self.wall_thickness_unit.currentText()
+        pressure_unit = self.design_pressure_unit.currentText()
+        stress_unit = self.allowable_stress_unit.currentText()
+        length_unit = self.tangent_to_tangent_length_unit.currentText()
+        force_unit = self.total_weight_or_force_unit.currentText()
+    
+        input_data = [
+            ["Parameter", "Value", "Unit"],
+            ["Material", self.material_combobox.currentText(), "-"],
+            ["Design Code", self.design_code_combobox.currentText(), "-"],
+            ["Diameter", f"{self.convert_units(self.detailed_results['D'], 'in', diameter_unit):.4f}", diameter_unit],
+            ["Wall Thickness", f"{self.convert_units(self.detailed_results['t_c'], 'in', thickness_unit):.4f}", thickness_unit],
+            ["Design Pressure", f"{self.convert_units(self.detailed_results['P'], 'psi', pressure_unit):.2f}", pressure_unit],
+            ["Tangent to Tangent Length", f"{self.convert_units(self.detailed_results['L'], 'in', length_unit):.2f}", length_unit],
+            ["Total Weight", f"{self.convert_units(self.detailed_results['total_weight'], 'lbf', force_unit):.2f}", force_unit],
+            ["LTA Length", f"{self.convert_units(self.detailed_results['s'], 'in', length_unit):.4f}", length_unit],
+            ["LTA Width", f"{self.convert_units(self.detailed_results['c'], 'in', length_unit):.4f}", length_unit],
+        ]
+        story.append(self.create_table(input_data, "Input Parameters"))
+        story.append(Spacer(1, 0.25*inch))
+    
+        # STEP 1
+        story.append(Paragraph("STEP 1 – Determine the following parameters", styles['Heading2']))
+        step1_data = [
+            ["Parameter", "Value", "Unit"],
+            ["t_rd", f"{self.convert_units(self.detailed_results['t_rd'], 'in', thickness_unit):.4f}", thickness_unit],
+            ["D_o", f"{self.convert_units(self.detailed_results['D_o'], 'in', diameter_unit):.2f}", diameter_unit],
+            ["R", f"{self.convert_units(self.detailed_results['R'], 'in', diameter_unit):.2f}", diameter_unit],
+            ["L_msd", f"{self.convert_units(self.detailed_results['L_msd'], 'in', length_unit):.2f}", length_unit],
+        ]
+        story.append(self.create_table(step1_data, "Step 1 Parameters"))
+        story.append(Spacer(1, 0.25*inch))
+    
+        # STEP 2
+        story.append(Paragraph("STEP 2 – Determine the RSF for the local thin area", styles['Heading2']))
+        step2_data = [
+            ["Parameter", "Value", "Unit"],
+            ["s", f"{self.convert_units(self.detailed_results['s'], 'in', length_unit):.4f}", length_unit],
+            ["c", f"{self.convert_units(self.detailed_results['c'], 'in', length_unit):.4f}", length_unit],
+            ["t_mm", f"{self.convert_units(self.detailed_results['t_mm'], 'in', thickness_unit):.4f}", thickness_unit],
+            ["R_t", f"{self.detailed_results['R_t']:.4f}", "-"],
+            ["λ", f"{self.detailed_results['lambda_s']:.4f}", "-"],
+            ["RSF_lta", f"{self.detailed_results['RSF_lta']:.4f}", "-"],
+            ["t_eq", f"{self.convert_units(self.detailed_results['t_eq'], 'in', thickness_unit):.4f}", thickness_unit],
+        ]
+        story.append(self.create_table(step2_data, "Step 2 Calculations"))
+        story.append(Spacer(1, 0.25*inch))
+
+        # STEP 3
+        story.append(Paragraph("STEP 3 – Assess the Pitting Damage", styles['Heading2']))
+        step3_data = [
+            ["Parameter", "Value", "Unit"],
+            ["R_m", f"{self.convert_units(self.detailed_results['R_m'], 'in', diameter_unit):.4f}", diameter_unit],
+            ["A_sl", f"{self.detailed_results['A_sl']:.4f}", "-"],
+            ["t_sl", f"{self.convert_units(self.detailed_results['t_sl'], 'in', thickness_unit):.4f}", thickness_unit],
+            ["σ_1", f"{self.convert_units(self.detailed_results['sigma_1'], 'psi', stress_unit):.4f}", stress_unit],
+            ["σ_2", f"{self.convert_units(self.detailed_results['sigma_2'], 'psi', stress_unit):.4f}", stress_unit],
+        ]
+        story.append(self.create_table(step3_data, "Step 3 Calculations"))
+        story.append(Spacer(1, 0.25*inch))
+    
+        # Pit Couple Calculations
+        story.append(Paragraph("Pit Couple Calculations", styles['Heading2']))
+        pit_data = [["Pit Couple", "w_avg", "d_avg", "P_avg", "ρ_1", "ρ_2", "ψ", "Φ", "E_avg", "RSF"]]
+        for i, (RSF, pit) in enumerate(zip(self.detailed_results['RSF_values'], self.detailed_results['inspection_data']), 1):
+            w_avg = (pit[4] + pit[6]) / 2
+            d_avg = (pit[3] + pit[5]) / 2
+            P_avg = (pit[1] - d_avg) / pit[1]
+            rho_1 = self.detailed_results['sigma_1'] / P_avg
+            rho_2 = self.detailed_results['sigma_2'] / P_avg
+            theta_rad = math.radians(pit[2])
+            psi = ((math.cos(theta_rad)**4 + math.sin(2*theta_rad)**2) * rho_1**2 -
+                   (3 * math.sin(2*theta_rad)**2 * rho_1 * rho_2) / 2 +
+                   (math.sin(theta_rad)**4 + math.sin(2*theta_rad)**2) * rho_2**2)
+            phi = P_avg * max(abs(rho_1), abs(rho_2), abs(rho_1 - rho_2))
+            E_avg = min(phi / math.sqrt(psi), 1)
+            pit_data.append([
+                str(i),
+                f"{self.convert_units(w_avg, 'in', thickness_unit):.4f}",
+                f"{self.convert_units(d_avg, 'in', thickness_unit):.4f}",
+                f"{P_avg:.4f}",
+                f"{self.convert_units(rho_1, 'psi', stress_unit):.4f}",
+                f"{self.convert_units(rho_2, 'psi', stress_unit):.4f}",
+                f"{psi:.4f}",
+                f"{phi:.4f}",
+                f"{E_avg:.4f}",
+                f"{RSF:.4f}"
+            ])
+        story.append(self.create_table(pit_data, "Pit Couple Calculations"))
+        story.append(Spacer(1, 0.25*inch))
+    
+        story.append(Paragraph(f"RSF_pit = {self.detailed_results['RSF_pit']:.4f}", styles['BodyText']))
+        story.append(Paragraph(f"RSF_comb = {self.detailed_results['RSF_comb']:.4f}", styles['BodyText']))
+        story.append(Spacer(1, 0.25*inch))
+    
+        # STEP 4
+        story.append(Paragraph("STEP 4 – Check the circumferential extent of the flaw", styles['Heading2']))
+        step4_data = [
+            ["Parameter", "Value", "Unit"],
+            ["λ_c", f"{self.detailed_results['lambda_c']:.4f}", "-"],
+            ["TSF", f"{self.detailed_results['TSF']:.4f}", "-"],
+        ]
+        story.append(self.create_table(step4_data, "Step 4 Calculations"))
+        story.append(Spacer(1, 0.25*inch))
+    
+        # Conditions Check
+        story.append(Paragraph("Conditions Check", styles['Heading2']))
+        conditions = [
+            f"Condition 1: λ_c ≤ 9 - {'Satisfied' if self.detailed_results['conditions'][0] else 'Not Satisfied'}",
+            f"Condition 2: D/t_c ≥ 20 - {'Satisfied' if self.detailed_results['conditions'][1] else 'Not Satisfied'}",
+            f"Condition 3: 0.7 ≤ RSF_comb ≤ 1 - {'Satisfied' if self.detailed_results['conditions'][2] else 'Not Satisfied'}",
+            f"Condition 4: 0.7 ≤ E ≤ 1 - {'Satisfied' if self.detailed_results['conditions'][3] else 'Not Satisfied'}",
+            f"Condition 5: 0.7 ≤ E ≤ 1 - {'Satisfied' if self.detailed_results['conditions'][4] else 'Not Satisfied'}"
+        ]
+        for condition in conditions:
+            story.append(Paragraph(condition, styles['BodyText']))
+        story.append(Spacer(1, 0.25*inch))
+    
+        # STEP 5
+        story.append(Paragraph("STEP 5 – Calculate the MAWP", styles['Heading2']))
+        step5_data = [
+            ["Parameter", "Value", "Unit"],
+            ["MAWP_C", f"{self.convert_units(self.detailed_results['MAWP_C'], 'psi', pressure_unit):.4f}", pressure_unit],
+            ["MAWP_L", f"{self.convert_units(self.detailed_results['MAWP_L'], 'psi', pressure_unit):.4f}", pressure_unit],
+            ["MAWP", f"{self.convert_units(self.detailed_results['MAWP'], 'psi', pressure_unit):.4f}", pressure_unit],
+            ["MAWP_r", f"{self.convert_units(self.detailed_results['MAWP_r'], 'psi', pressure_unit):.4f}", pressure_unit],
+        ]
+        story.append(self.create_table(step5_data, "Step 5 MAWP Calculations"))
+        story.append(Spacer(1, 0.25*inch))
+    
+        # Pit Sizing Calculations
+        story.append(Paragraph("Pit Sizing Calculations", styles['Heading2']))
+        pit_sizing_data = [["Pit Couple", "R_t,i", "Q_1k", "Q_1√(D*t_c)", "d_a1 Ok?", "R_t,j", "Q_2k", "Q_2√(D*t_c)", "d_a2 Ok?", "R_t ≥ 0.20"]]
+        for calc in self.detailed_results['pit_sizing_calculations']:
+            pit_sizing_data.append([
+                str(calc['pit_couple']),
+                f"{calc['R_t_i']:.3f}",
+                f"{calc['Q_1']:.3f}",
+                f"{self.convert_units(calc['d_allow_1'], 'in', thickness_unit):.3f}",
+                "Yes" if calc['d_i_ok'] else "No",
+                f"{calc['R_t_j']:.3f}",
+                f"{calc['Q_2']:.3f}",
+                f"{self.convert_units(calc['d_allow_2'], 'in', thickness_unit):.3f}",
+                "Yes" if calc['d_j_ok'] else "No",
+                "Yes" if calc['R_t_ok'] else "No"
+            ])
+        story.append(self.create_table(pit_sizing_data, "Pit Sizing Calculations"))
+        story.append(Spacer(1, 0.25*inch))
+    
+        # Summary
+        story.append(Paragraph("SUMMARY", styles['Heading1']))
+        MAWP_r = self.convert_units(self.detailed_results['MAWP_r'], 'psi', pressure_unit)
+        story.append(Paragraph(f"MAWP_r = {MAWP_r:.3f} {pressure_unit}", styles['BodyText']))
+        if 'P' in self.detailed_results:
+            design_pressure = self.convert_units(self.detailed_results['P'], 'psi', pressure_unit)
+        else:
+            # Assuming you have stored the input design pressure somewhere, e.g., self.design_pressure
+            design_pressure = self.convert_units(self.design_pressure, self.design_pressure_unit.currentText(), pressure_unit)
+        if MAWP_r >= design_pressure:
+            conclusion = f"The equipment passes the Level 2 assessment at {design_pressure:.2f} {pressure_unit}."
+        else:
+            conclusion = f"The equipment fails the Level 2 assessment at {design_pressure:.2f} {pressure_unit}, "
+            conclusion += f"but it is fit for service at a reduced MAWP of {MAWP_r:.1f} {pressure_unit}."
+        story.append(Paragraph(conclusion, styles['BodyText']))
+    
+        # Build PDF
+        doc.build(story, onFirstPage=self.addPageNumber, onLaterPages=self.addPageNumber)
+
+    def generateLTAInWidespreadPittingReport(self):
+        file_name, _ = QFileDialog.getSaveFileName(self, "Save Detailed Report", "", "PDF Files (*.pdf);;All Files (*)")
+        if not file_name:
+            return
+    
+        doc = SimpleDocTemplate(file_name, pagesize=letter, rightMargin=72, leftMargin=72, topMargin=72, bottomMargin=18)
+        story = []
+    
+        # Styles
+        styles = getSampleStyleSheet()
+        styles['Title'].fontSize = 16
+        styles['Title'].alignment = TA_CENTER
+        styles['Title'].spaceAfter = 12
+        styles['Heading1'].fontSize = 14
+        styles['Heading1'].spaceAfter = 6
+        styles['Heading2'].fontSize = 12
+        styles['Heading2'].spaceAfter = 6
+        styles['BodyText'].fontName = 'Times-Roman'
+        styles['BodyText'].fontSize = 11
+        styles['BodyText'].leading = 13
+        styles['Normal'].fontName = 'Helvetica'
+        styles['Normal'].fontSize = 9
+    
+        # Title
+        story.append(Paragraph("Level 2 Assessment for Region Of Local Metal Loss Located In An Area Of Widespread Pitting", styles['Title']))
+        story.append(Spacer(1, 0.25*inch))
+    
+        # Input Parameters
+        story.append(Paragraph("Input Parameters", styles['Heading1']))
+        diameter_unit = self.diameter_unit.currentText()
+        thickness_unit = self.wall_thickness_unit.currentText()
+        pressure_unit = self.design_pressure_unit.currentText()
+        stress_unit = self.allowable_stress_unit.currentText()
+        length_unit = self.tangent_to_tangent_length_unit.currentText()
+        force_unit = self.total_weight_or_force_unit.currentText()
+    
+        input_data = [
+            ["Parameter", "Value", "Unit"],
+            ["Material", self.material_combobox.currentText(), "-"],
+            ["Design Code", self.design_code_combobox.currentText(), "-"],
+            ["Diameter", f"{self.convert_units(self.detailed_results['D'], 'in', diameter_unit):.4f}", diameter_unit],
+            ["Wall Thickness", f"{self.convert_units(self.detailed_results['t_c'], 'in', thickness_unit):.4f}", thickness_unit],
+            ["Design Pressure", f"{self.convert_units(self.detailed_results['P'], 'psi', pressure_unit):.2f}", pressure_unit],
+            ["Tangent to Tangent Length", f"{self.convert_units(self.detailed_results['L'], 'in', length_unit):.2f}", length_unit],
+            ["Total Weight", f"{self.convert_units(self.detailed_results['total_weight'], 'lbf', force_unit):.2f}", force_unit],
+            ["LTA Length", f"{self.convert_units(self.detailed_results['s'], 'in', length_unit):.4f}", length_unit],
+            ["LTA Width", f"{self.convert_units(self.detailed_results['c'], 'in', length_unit):.4f}", length_unit],
+        ]
+        story.append(self.create_table(input_data, "Input Parameters"))
+        story.append(Spacer(1, 0.25*inch))
+    
+        # STEP 1
+        story.append(Paragraph("STEP 1 – Determine the following parameters", styles['Heading2']))
+        step1_data = [
+            ["Parameter", "Value", "Unit"],
+            ["t_rd", f"{self.convert_units(self.detailed_results['t_rd'], 'in', thickness_unit):.4f}", thickness_unit],
+            ["D_o", f"{self.convert_units(self.detailed_results['D_o'], 'in', diameter_unit):.2f}", diameter_unit],
+            ["R", f"{self.convert_units(self.detailed_results['R'], 'in', diameter_unit):.2f}", diameter_unit],
+            ["L_msd", f"{self.convert_units(self.detailed_results['L_msd'], 'in', length_unit):.2f}", length_unit],
+        ]
+        story.append(self.create_table(step1_data, "Step 1 Parameters"))
+        story.append(Spacer(1, 0.25*inch))
+    
+        # STEP 2
+        story.append(Paragraph("STEP 2 – Determine the RSF for the local thin area", styles['Heading2']))
+        step2_data = [
+            ["Parameter", "Value", "Unit"],
+            ["s", f"{self.convert_units(self.detailed_results['s'], 'in', length_unit):.4f}", length_unit],
+            ["c", f"{self.convert_units(self.detailed_results['c'], 'in', length_unit):.4f}", length_unit],
+            ["t_mm", f"{self.convert_units(self.detailed_results['t_mm'], 'in', thickness_unit):.4f}", thickness_unit],
+            ["R_t", f"{self.detailed_results['R_t']:.4f}", "-"],
+            ["λ", f"{self.detailed_results['lambda_s']:.4f}", "-"],
+            ["RSF_lta", f"{self.detailed_results['RSF_lta']:.4f}", "-"],
+            ["t_eq", f"{self.convert_units(self.detailed_results['t_eq'], 'in', thickness_unit):.4f}", thickness_unit],
+        ]
+        story.append(self.create_table(step2_data, "Step 2 Calculations"))
+        story.append(Spacer(1, 0.25*inch))
+
+        # STEP 3
+        story.append(Paragraph("STEP 3 – Assess the Pitting Damage", styles['Heading2']))
+        step3_data = [
+            ["Parameter", "Value", "Unit"],
+            ["R_m", f"{self.convert_units(self.detailed_results['R_m'], 'in', diameter_unit):.4f}", diameter_unit],
+            ["A_sl", f"{self.detailed_results['A_sl']:.4f}", "-"],
+            ["t_sl", f"{self.convert_units(self.detailed_results['t_sl'], 'in', thickness_unit):.4f}", thickness_unit],
+            ["σ_1", f"{self.convert_units(self.detailed_results['sigma_1'], 'psi', stress_unit):.4f}", stress_unit],
+            ["σ_2", f"{self.convert_units(self.detailed_results['sigma_2'], 'psi', stress_unit):.4f}", stress_unit],
+        ]
+        story.append(self.create_table(step3_data, "Step 3 Calculations"))
+        story.append(Spacer(1, 0.25*inch))
+    
+        # Pit Couple Calculations
+        story.append(Paragraph("Pit Couple Calculations", styles['Heading2']))
+        pit_data = [["Pit Couple", "w_avg", "d_avg", "P_avg", "ρ_1", "ρ_2", "ψ", "Φ", "E_avg", "RSF"]]
+        for i, (RSF, pit) in enumerate(zip(self.detailed_results['RSF_values'], self.detailed_results['inspection_data']), 1):
+            w_avg = (pit[4] + pit[6]) / 2
+            d_avg = (pit[3] + pit[5]) / 2
+            P_avg = (pit[1] - d_avg) / pit[1]
+            rho_1 = self.detailed_results['sigma_1'] / P_avg
+            rho_2 = self.detailed_results['sigma_2'] / P_avg
+            theta_rad = math.radians(pit[2])
+            psi = ((math.cos(theta_rad)**4 + math.sin(2*theta_rad)**2) * rho_1**2 -
+                   (3 * math.sin(2*theta_rad)**2 * rho_1 * rho_2) / 2 +
+                   (math.sin(theta_rad)**4 + math.sin(2*theta_rad)**2) * rho_2**2)
+            phi = P_avg * max(abs(rho_1), abs(rho_2), abs(rho_1 - rho_2))
+            E_avg = min(phi / math.sqrt(psi), 1)
+            pit_data.append([
+                str(i),
+                f"{self.convert_units(w_avg, 'in', thickness_unit):.4f}",
+                f"{self.convert_units(d_avg, 'in', thickness_unit):.4f}",
+                f"{P_avg:.4f}",
+                f"{self.convert_units(rho_1, 'psi', stress_unit):.4f}",
+                f"{self.convert_units(rho_2, 'psi', stress_unit):.4f}",
+                f"{psi:.4f}",
+                f"{phi:.4f}",
+                f"{E_avg:.4f}",
+                f"{RSF:.4f}"
+            ])
+        story.append(self.create_table(pit_data, "Pit Couple Calculations"))
+        story.append(Spacer(1, 0.25*inch))
+    
+        story.append(Paragraph(f"RSF_pit = {self.detailed_results['RSF_pit']:.4f}", styles['BodyText']))
+        story.append(Paragraph(f"RSF_comb = {self.detailed_results['RSF_comb']:.4f}", styles['BodyText']))
+        story.append(Spacer(1, 0.25*inch))
+    
+        # STEP 4
+        story.append(Paragraph("STEP 4 – Check the circumferential extent of the flaw", styles['Heading2']))
+        step4_data = [
+            ["Parameter", "Value", "Unit"],
+            ["λ_c", f"{self.detailed_results['lambda_c']:.4f}", "-"],
+            ["TSF", f"{self.detailed_results['TSF']:.4f}", "-"],
+        ]
+        story.append(self.create_table(step4_data, "Step 4 Calculations"))
+        story.append(Spacer(1, 0.25*inch))
+    
+        # Conditions Check
+        story.append(Paragraph("Conditions Check", styles['Heading2']))
+        conditions = [
+            f"Condition 1: λ_c ≤ 9 - {'Satisfied' if self.detailed_results['conditions'][0] else 'Not Satisfied'}",
+            f"Condition 2: D/t_c ≥ 20 - {'Satisfied' if self.detailed_results['conditions'][1] else 'Not Satisfied'}",
+            f"Condition 3: 0.7 ≤ RSF_comb ≤ 1 - {'Satisfied' if self.detailed_results['conditions'][2] else 'Not Satisfied'}",
+            f"Condition 4: 0.7 ≤ E ≤ 1 - {'Satisfied' if self.detailed_results['conditions'][3] else 'Not Satisfied'}",
+            f"Condition 5: 0.7 ≤ E ≤ 1 - {'Satisfied' if self.detailed_results['conditions'][4] else 'Not Satisfied'}"
+        ]
+        for condition in conditions:
+            story.append(Paragraph(condition, styles['BodyText']))
+        story.append(Spacer(1, 0.25*inch))
+    
+        # STEP 5
+        story.append(Paragraph("STEP 5 – Calculate the MAWP", styles['Heading2']))
+        step5_data = [
+            ["Parameter", "Value", "Unit"],
+            ["MAWP_C", f"{self.convert_units(self.detailed_results['MAWP_C'], 'psi', pressure_unit):.4f}", pressure_unit],
+            ["MAWP_L", f"{self.convert_units(self.detailed_results['MAWP_L'], 'psi', pressure_unit):.4f}", pressure_unit],
+            ["MAWP", f"{self.convert_units(self.detailed_results['MAWP'], 'psi', pressure_unit):.4f}", pressure_unit],
+            ["MAWP_r", f"{self.convert_units(self.detailed_results['MAWP_r'], 'psi', pressure_unit):.4f}", pressure_unit],
+        ]
+        story.append(self.create_table(step5_data, "Step 5 MAWP Calculations"))
+        story.append(Spacer(1, 0.25*inch))
+    
+        # Pit Sizing Calculations
+        story.append(Paragraph("Pit Sizing Calculations", styles['Heading2']))
+        pit_sizing_data = [["Pit Couple", "R_t,i", "Q_1k", "Q_1√(D*t_c)", "d_a1 Ok?", "R_t,j", "Q_2k", "Q_2√(D*t_c)", "d_a2 Ok?", "R_t ≥ 0.20"]]
+        for calc in self.detailed_results['pit_sizing_calculations']:
+            pit_sizing_data.append([
+                str(calc['pit_couple']),
+                f"{calc['R_t_i']:.3f}",
+                f"{calc['Q_1']:.3f}",
+                f"{self.convert_units(calc['d_allow_1'], 'in', thickness_unit):.3f}",
+                "Yes" if calc['d_i_ok'] else "No",
+                f"{calc['R_t_j']:.3f}",
+                f"{calc['Q_2']:.3f}",
+                f"{self.convert_units(calc['d_allow_2'], 'in', thickness_unit):.3f}",
+                "Yes" if calc['d_j_ok'] else "No",
+                "Yes" if calc['R_t_ok'] else "No"
+            ])
+        story.append(self.create_table(pit_sizing_data, "Pit Sizing Calculations"))
+        story.append(Spacer(1, 0.25*inch))
+    
+        # Summary
+        story.append(Paragraph("SUMMARY", styles['Heading1']))
+        MAWP_r = self.convert_units(self.detailed_results['MAWP_r'], 'psi', pressure_unit)
+        story.append(Paragraph(f"MAWP_r = {MAWP_r:.3f} {pressure_unit}", styles['BodyText']))
+        if 'P' in self.detailed_results:
+            design_pressure = self.convert_units(self.detailed_results['P'], 'psi', pressure_unit)
+        else:
+            # Assuming you have stored the input design pressure somewhere, e.g., self.design_pressure
+            design_pressure = self.convert_units(self.design_pressure, self.design_pressure_unit.currentText(), pressure_unit)
+        if MAWP_r >= design_pressure:
+            conclusion = f"The equipment passes the Level 2 assessment at {design_pressure:.2f} {pressure_unit}."
+        else:
+            conclusion = f"The equipment fails the Level 2 assessment at {design_pressure:.2f} {pressure_unit}, "
+            conclusion += f"but it is fit for service at a reduced MAWP of {MAWP_r:.1f} {pressure_unit}."
+        story.append(Paragraph(conclusion, styles['BodyText']))
+    
+        # Build PDF
+        doc.build(story, onFirstPage=self.addPageNumber, onLaterPages=self.addPageNumber)
+            
+    def create_table(self, data, title):
+        table = Table(data)
+        table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 10),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+            ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+            ('TEXTCOLOR', (0, 1), (-1, -1), colors.black),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+            ('FONTSIZE', (0, 1), (-1, -1), 9),
+            ('TOPPADDING', (0, 1), (-1, -1), 3),
+            ('BOTTOMPADDING', (0, 1), (-1, -1), 3),
+            ('GRID', (0, 0), (-1, -1), 1, colors.black)
+        ]))
+        return table
+
+    def addPageNumber(self, canvas, doc):
+        page_num = canvas.getPageNumber()
+        text = f"Page {page_num}"
+        canvas.saveState()
+        canvas.setFont('Times-Roman', 9)
+        canvas.drawRightString(letter[0]-72, 72, text)
+        canvas.restoreState()
+     
+    def saveDetailedReport(self, detailed_result, corrosion_type):
+        file_name, _ = QFileDialog.getSaveFileName(self, "Save Detailed Report", "", "PDF Files (*.pdf);;All Files (*)")
+        if file_name:
+            try:
+                doc = SimpleDocTemplate(file_name, pagesize=letter)
+                styles = getSampleStyleSheet()
+                
+                # Split the report into paragraphs
+                paragraphs = [Paragraph(line, styles['Normal']) for line in detailed_result.split('\n') if line.strip()]
+                
+                # Build the PDF
+                doc.build(paragraphs)
+                
+                QMessageBox.information(self, "Report Saved", f"Detailed report for {corrosion_type} has been saved as PDF.")
+            except Exception as e:
+                QMessageBox.critical(self, "Error", f"An error occurred while saving the report: {str(e)}")
+            
+    def convert_units(self, value, from_unit, to_unit):
+        # Conversion factors
+        length_factors = {
+            'mm': 0.001, 'cm': 0.01, 'm': 1, 'in': 0.0254, 'ft': 0.3048, 'yd': 0.9144
+        }
+        pressure_factors = {
+            'Pa': 1, 'kPa': 1000, 'MPa': 1e6, 'psi': 6894.75729, 'bar': 1e5,
+            'psf': 47.88, 'inHg': 3386.39
+        }
+        stress_factors = {
+            'Pa': 1, 'kPa': 1000, 'MPa': 1e6, 'psi': 6894.75729, 'ksi': 6.894757e6
+        }
+        force_factors = {
+            'N': 1, 'kN': 1000, 'lbf': 4.448222, 'kip': 4448.222
+        }
+        moment_factors = {
+            'N-m': 1, 'kN-m': 1000, 'in-lbf': 0.112985, 'ft-lbf': 1.355818
+        }
+    
+        # Determine the type of unit
+        if from_unit in length_factors and to_unit in length_factors:
+            factors = length_factors
+        elif from_unit in pressure_factors and to_unit in pressure_factors:
+            factors = pressure_factors
+        elif from_unit in stress_factors and to_unit in stress_factors:
+            factors = stress_factors
+        elif from_unit in force_factors and to_unit in force_factors:
+            factors = force_factors
+        elif from_unit in moment_factors and to_unit in moment_factors:
+            factors = moment_factors
+        else:
+            raise ValueError(f"Unsupported unit conversion: {from_unit} to {to_unit}")
+    
+        # Convert to base unit, then to target unit
+        return value * factors[from_unit] / factors[to_unit]
+
+    def applyTheme(self, theme):
+        if theme == "dark":
+            self.setStyleSheet("""
+                QWidget { background-color: #2E2E2E; color: #FFFFFF; }
+                QPushButton { background-color: #4A4A4A; border: none; padding: 5px; border-radius: 3px; }
+                QPushButton:hover { background-color: #5A5A5A; }
+                QLineEdit, QComboBox { background-color: #3E3E3E; border: 1px solid #5A5A5A; padding: 3px; border-radius: 3px; }
+            """)
+        else:
+            self.setStyleSheet("""
+                QWidget { background-color: #F0F0F0; color: #333333; }
+                QPushButton { background-color: #E0E0E0; border: none; padding: 5px; border-radius: 3px; }
+                QPushButton:hover { background-color: #D0D0D0; }
+                QLineEdit, QComboBox { background-color: #FFFFFF; border: 1px solid #CCCCCC; padding: 3px; border-radius: 3px; }
+            """)
+            
+class FullAssessmentPage(Level1AssessmentPage):
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.setWindowTitle("Full Assessment")
+        self.applyTheme(self.config['theme'])
+        self.updateUnitOptions()  # Call this to ensure units are set correctly on initialization
+
+    def calculateRwt(self):
+        super().calculateRwt()
+        # Add additional calculations for full assessment if needed
+
+class SettingsDialog(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Settings")
+        self.initUI()
+
+    def initUI(self):
+        layout = QVBoxLayout()
+
+        theme_label = QLabel("Theme:")
+        self.theme_combo = QComboBox()
+        self.theme_combo.addItems(["Light", "Dark"])
+        layout.addWidget(theme_label)
+        layout.addWidget(self.theme_combo)
+
+        unit_system_label = QLabel("Unit System:")
+        self.unit_system_combo = QComboBox()
+        self.unit_system_combo.addItems(["SI", "Imperial"])
+        layout.addWidget(unit_system_label)
+        layout.addWidget(self.unit_system_combo)
+
+        save_button = QPushButton("Save")
+        save_button.clicked.connect(self.saveSettings)
+        layout.addWidget(save_button)
+
+        self.setLayout(layout)
+        self.loadCurrentSettings()
+
+    def loadCurrentSettings(self):
+        config = load_config()
+        self.theme_combo.setCurrentText(config['theme'].capitalize())
+        self.unit_system_combo.setCurrentText(config['unit_system'])
+
+    def saveSettings(self):
+        config = load_config()
+        config['theme'] = self.theme_combo.currentText().lower()
+        config['unit_system'] = self.unit_system_combo.currentText()
+        save_config(config)
+        self.accept()
+
+class PittingAssessmentApp(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.config = load_config()
+        self.initUI()
+        set_theme(self, self.config['theme'])
+
+    def initUI(self):
+        self.setWindowTitle("API 579 Pitting Assessment")
+        self.setGeometry(100, 100, 1200, 800)
+        self.setWindowIcon(QIcon("assets/icon.png"))
+
+        self.stacked_widget = QStackedWidget()
+        self.setCentralWidget(self.stacked_widget)
+
+        self.splash_screen = QLabel()
+        movie = QMovie("loading.gif")
+        self.splash_screen.setMovie(movie)
+        movie.start()
+
+        splash_layout = QVBoxLayout()
+        app_name_label = QLabel("Pitting Assessment App")
+        app_name_label.setAlignment(Qt.AlignCenter)
+        app_name_label.setFont(QFont("Arial", 24, QFont.Bold))
+        splash_layout.addWidget(app_name_label)
+        splash_layout.addWidget(self.splash_screen)
+        splash_widget = QWidget()
+        splash_widget.setLayout(splash_layout)
+
+        self.login_page = LoginPage(parent=self)
+        self.register_page = RegisterPage(parent=self)
+        self.main_page = MainPage(parent=self)
+        self.level1_assessment_page = Level1AssessmentPage(parent=self)
+        self.level2_assessment_page = Level2AssessmentPage(parent=self)
+        self.full_assessment_page = FullAssessmentPage(parent=self)
+
+        self.stacked_widget.addWidget(splash_widget)
+        self.stacked_widget.addWidget(self.login_page)
+        self.stacked_widget.addWidget(self.register_page)
+        self.stacked_widget.addWidget(self.main_page)
+        self.stacked_widget.addWidget(self.level1_assessment_page)
+        self.stacked_widget.addWidget(self.level2_assessment_page)
+        self.stacked_widget.addWidget(self.full_assessment_page)
+
+        QTimer.singleShot(3000, self.showLoginPage)
+
+        self.createMenu()
+        self.createToolbar()
+        self.previous_results = []
+        self.loadPreviousResults()
+        self.loadSettings()
+        
+        set_theme(self, self.config['theme'])
+
+    def showLoginPage(self):
+        self.stacked_widget.setCurrentWidget(self.login_page)
+
+    def showRegisterPage(self):
+        self.stacked_widget.setCurrentWidget(self.register_page)
+
+    def showMainPage(self):
+        self.stacked_widget.setCurrentWidget(self.main_page)
+
+    def showLevel1Assessment(self):
+        self.stacked_widget.setCurrentWidget(self.level1_assessment_page)
+
+    def showLevel2Assessment(self):
+        self.stacked_widget.setCurrentWidget(self.level2_assessment_page)
+
+    def showLevel3Assessment(self):
+        QMessageBox.information(self, "Level 3 Assessment", "Level 3 Assessment not implemented yet.")
+
+    def showFullAssessment(self):
+        self.stacked_widget.setCurrentWidget(self.full_assessment_page)
+        
+    def createMenu(self):
+        menubar = self.menuBar()
+        
+        file_menu = menubar.addMenu('File')
+        open_act = QAction('Open', self)
+        open_act.triggered.connect(self.openFile)
+        file_menu.addAction(open_act)
+
+        save_act = QAction('Save', self)
+        save_act.triggered.connect(self.saveFile)
+        file_menu.addAction(save_act)
+
+        file_menu.addSeparator()
+        
+        log_out_act = QAction('Log Out', self)
+        log_out_act.triggered.connect(self.showLoginPage)
+        file_menu.addAction(log_out_act)
+
+        exit_act = QAction('Exit', self)
+        exit_act.triggered.connect(self.close)
+        file_menu.addAction(exit_act)
+
+        # Add Settings menu
+        settings_menu = menubar.addMenu('Settings')
+        theme_menu = settings_menu.addMenu('Theme')
+        
+        self.light_theme_act = QAction('Light', self, checkable=True)
+        self.light_theme_act.triggered.connect(lambda: self.changeTheme('light'))
+        theme_menu.addAction(self.light_theme_act)
+        
+        self.dark_theme_act = QAction('Dark', self, checkable=True)
+        self.dark_theme_act.triggered.connect(lambda: self.changeTheme('dark'))
+        theme_menu.addAction(self.dark_theme_act)
+        
+        # Unit System submenu
+        unit_system_menu = settings_menu.addMenu('Unit System')
+        
+        self.si_units_act = QAction('SI', self, checkable=True)
+        self.si_units_act.triggered.connect(lambda: self.changeUnitSystem('SI'))
+        unit_system_menu.addAction(self.si_units_act)
+        
+        self.imperial_units_act = QAction('Imperial', self, checkable=True)
+        self.imperial_units_act.triggered.connect(lambda: self.changeUnitSystem('Imperial'))
+        unit_system_menu.addAction(self.imperial_units_act)
+        
+        help_menu = menubar.addMenu('Help')
+        about_action = QAction('About', self)
+        about_action.triggered.connect(self.showAbout)
+        help_menu.addAction(about_action)
+        
+        user_manual_act = QAction('User Manual', self)
+        user_manual_act.triggered.connect(self.showUserManual)
+        help_menu.addAction(user_manual_act)
+        
+    # Set initial checkmarks
+        self.updateSettingsMenu()
+
+    def updateSettingsMenu(self):
+        # Update theme checkmarks
+        self.light_theme_act.setChecked(self.config['theme'] == 'light')
+        self.dark_theme_act.setChecked(self.config['theme'] == 'dark')
+        
+        # Update unit system checkmarks
+        self.si_units_act.setChecked(self.config['unit_system'] == 'SI')
+        self.imperial_units_act.setChecked(self.config['unit_system'] == 'Imperial')
+
+    def changeTheme(self, theme):
+        self.config['theme'] = theme
+        save_config(self.config)
+        self.updateAllPages()
+        self.updateSettingsMenu()
+
+    def changeUnitSystem(self, unit_system):
+        self.config['unit_system'] = unit_system
+        save_config(self.config)
+        self.updateAllPages()
+        self.updateSettingsMenu()
+
+    def createToolbar(self):
+        toolbar = QToolBar("Main Toolbar", self)
+        self.addToolBar(toolbar)
+
+        view_results_act = QAction("Previous Results", self)
+        view_results_act.triggered.connect(self.viewPreviousResults)
+        toolbar.addAction(view_results_act)
+
+
+    def openFile(self):
+        options = QFileDialog.Options()
+        file_name, _ = QFileDialog.getOpenFileName(self, "Open File", "", "JSON Files (*.json);;All Files (*)", options=options)
+        if file_name:
+            with open(file_name, 'r') as file:
+                self.previous_results = json.load(file)
+            QMessageBox.information(self, "File Loaded", "Previous results loaded successfully.")
+
+    def saveFile(self):
+        options = QFileDialog.Options()
+        file_name, _ = QFileDialog.getSaveFileName(self, "Save File", "", "JSON Files (*.json);;All Files (*)", options=options)
+        if file_name:
+            with open(file_name, 'w') as file:
+                json.dump(self.previous_results, file)
+            QMessageBox.information(self, "File Saved", "Previous results saved successfully.")
+
+    def viewPreviousResults(self):
+        if not os.path.exists("previous_results.json") or not self.previous_results:
+            QMessageBox.information(self, "No Results", "No previous results found.")
+            return
+
+        with open("previous_results.json", "r") as file:
+            self.previous_results = json.load(file)
+
+        if not self.previous_results:
+            QMessageBox.information(self, "No Results", "No previous results found.")
+            return
+
+        self.results_window = QMainWindow(self)
+        self.results_window.setWindowTitle("Previous Results")
+        self.results_window.setGeometry(150, 150, 600, 400)
+
+        table_widget = QTableWidget()
+        table_widget.setRowCount(len(self.previous_results))
+        table_widget.setColumnCount(len(self.previous_results[0]))
+        table_widget.setHorizontalHeaderLabels(self.previous_results[0].keys())
+        table_widget.setSelectionBehavior(QAbstractItemView.SelectRows)
+
+        for i, result in enumerate(self.previous_results):
+            for j, (key, value) in enumerate(result.items()):
+                table_widget.setItem(i, j, QTableWidgetItem(str(value)))
+
+        delete_button = QPushButton("Delete Selected")
+        delete_button.clicked.connect(lambda: self.deleteSelectedResult(table_widget))
+        clear_all_button = QPushButton("Clear All")
+        clear_all_button.clicked.connect(self.clearAllResults)
+
+        layout = QVBoxLayout()
+        layout.addWidget(table_widget)
+        layout.addWidget(delete_button)
+        layout.addWidget(clear_all_button)
+        container = QWidget()
+        container.setLayout(layout)
+
+        self.results_window.setCentralWidget(container)
+        self.results_window.show()
+
+    def deleteSelectedResult(self, table_widget):
+        selected_row = table_widget.currentRow()
+        if selected_row >= 0:
+            del self.previous_results[selected_row]
+            with open("previous_results.json", "w") as file:
+                json.dump(self.previous_results, file)
+            self.viewPreviousResults()
+            QMessageBox.information(self, "Deleted", "Selected result has been deleted.")
+
+    def clearAllResults(self):
+        self.previous_results = []
+        with open("previous_results.json", "w") as file:
+            json.dump(self.previous_results, file)
+        self.viewPreviousResults()
+        QMessageBox.information(self, "Cleared", "All results have been cleared.")
+
+    def loadSettings(self):
+        if os.path.exists("settings.json"):
+            with open("settings.json", "r") as file:
+                settings = json.load(file)
+                theme = settings.get("theme", "Light")
+                if theme == "Dark":
+                    self.setStyleSheet("QWidget { background-color: #2e2e2e; color: #ffffff; }")
+                else:
+                    self.setStyleSheet("")
+
+    def loadPreviousResults(self):
+        if os.path.exists("previous_results.json"):
+            with open("previous_results.json", "r") as file:
+                self.previous_results = json.load(file)
+
+  #  def openSettings(self):
+   #     settings_dialog = SettingsDialog()
+    #    if settings_dialog.exec_():
+     #       self.config = load_config()
+            self.updateAllPages()
+
+    def updateAllPages(self):
+        # Update Level 1 Assessment Page
+        self.level1_assessment_page.config = self.config
+        self.level1_assessment_page.updateUnitOptions()
+        self.level1_assessment_page.applyTheme(self.config['theme'])
+
+        # Update Level 2 Assessment Page
+        self.level2_assessment_page.config = self.config
+        self.level2_assessment_page.updateUnitOptions()
+        self.level2_assessment_page.applyTheme(self.config['theme'])
+
+        # Update Full Assessment Page
+        self.full_assessment_page.config = self.config
+        self.full_assessment_page.updateUnitOptions()
+        self.full_assessment_page.applyTheme(self.config['theme'])
+        
+        # Apply theme
+        set_theme(self, self.config['theme'])
+
+
+    def showAbout(self):
+        about_text = """
+        API 579 Pitting Assessment Tool
+        Version 1.0
+        
+        This application is designed to perform pitting assessments
+        according to API 579 standards. It provides both Level 1 and
+        comprehensive assessments for pressure vessels and piping.
+        
+        © 2023 Your Company Name
+        """
+        QMessageBox.about(self, "About", about_text)
+        
+    def showUserManual(self):
+        QMessageBox.information(self, "User Manual", 
+                                ("1. Select the material type and design code.\n"
+                                 "2. Choose the diameter type (inside or outside) and enter the corresponding value with its unit.\n"
+                                 "3. Enter the design pressure, future corrosion allowance, amount of metal uniform loss, nominal thickness, maximum pit depth, and allowable stress with their respective units.\n"
+                                 "4. Click 'Calculate' to perform the assessment.\n"
+                                 "5. View the results and save or print the report if needed.\n"
+                                 "6. Previous results can be viewed, deleted, or cleared from the 'View Previous Results' option in the toolbar.\n"))
+
+def main():
+    app = QApplication(sys.argv)
+    splash_pix = QPixmap('logo.png')
+    splash = QSplashScreen(splash_pix, Qt.WindowStaysOnTopHint)
+    splash.setMask(splash_pix.mask())
+    splash.show()
+    app.processEvents()
+
+    ex = PittingAssessmentApp()
+    QTimer.singleShot(3000, splash.close)
+    ex.show()
+
+    sys.exit(app.exec_())
+
+if __name__ == '__main__':
+    main()
